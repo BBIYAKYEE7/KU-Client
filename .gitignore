@@ -1,0 +1,30 @@
+# macOS
+.DS_Store
+.Trash/
+
+# Node/Electron
+node_modules/
+dist/
+build/
+*.log
+.npm/
+.cache/
+
+# Editor/OS
+.vscode/
+.idea/
+*.swp
+
+# Packages
+*.dmg
+*.exe
+*.AppImage
+*.deb
+*.blockmap
+
+# Others
+*.iso
+*.zip
+*.tar
+*.tar.gz
+
