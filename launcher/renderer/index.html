@@ -1,0 +1,67 @@
+<!doctype html>
+<html lang="ko">
+  <head>
+    <meta charset="utf-8" />
+    <meta name="viewport" content="width=device-width, initial-scale=1" />
+    <title>고려대학교 통합 런처</title>
+    <link rel="preconnect" href="https://fonts.googleapis.com">
+    <link rel="preconnect" href="https://fonts.gstatic.com" crossorigin>
+    <link href="https://cdn.jsdelivr.net/gh/orioncactus/pretendard/dist/web/static/pretendard.css" rel="stylesheet">
+    <link rel="stylesheet" href="styles.css" />
+  </head>
+  <body>
+    <div class="titlebar"></div>
+    <!-- 부팅화면 로딩 애니메이션 -->
+    <div id="boot-loader" class="boot-loader">
+      <div class="loader-spinner"></div>
+      <div class="loader-text">고려대학교 통합 런처</div>
+    </div>
+
+    <!-- 최초 실행 로그인 설정 모달 -->
+    <div id="setup-modal" class="setup-modal">
+      <div class="setup-card">
+        <h2>로그인 설정</h2>
+        <p class="setup-desc">KUPID 아이디와 각 서비스 비밀번호를 저장합니다. macOS 키체인에 안전하게 저장됩니다.</p>
+        <label class="setup-label">KUPID 아이디</label>
+        <input id="setup-account" class="setup-input" placeholder="예: ku123456" />
+        <label class="setup-label">포털 비밀번호</label>
+        <input id="setup-portal-pass" class="setup-input" type="password" placeholder="포털 비밀번호" />
+        <div class="setup-actions">
+          <button id="setup-cancel" class="btn btn-secondary">나중에</button>
+          <button id="setup-save" class="btn btn-primary">저장</button>
+        </div>
+      </div>
+    </div>
+    <main class="container">
+      <header class="header">
+        <div class="brand">
+          <img class="brand-logo" id="brand-logo" src="../image/logo(b).png" alt="Korea University" />
+        </div>
+        <button class="theme-toggle" id="theme-toggle" title="다크/라이트 모드 전환">
+          <span class="theme-icon">🌙</span>
+        </button>
+      </header>
+
+      <section class="actions">
+        <button class="card" id="btn-portal">
+          <img class="card-icon" src="../image/portal.png" alt="포털" />
+          <div class="card-title">포털</div>
+          <div class="card-desc">학교 포털 바로가기</div>
+        </button>
+        <button class="card" id="btn-lms">
+          <img class="card-icon" src="../image/LMS.png" alt="LMS" />
+          <div class="card-title">LMS</div>
+          <div class="card-desc">학습관리시스템 바로가기</div>
+        </button>
+      </section>
+
+      <footer class="footer">
+        <span>© Korea University</span>
+      </footer>
+    </main>
+
+    <script src="renderer.js"></script>
+  </body>
+  </html>
+
+

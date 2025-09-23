@@ -1,0 +1,19 @@
+{
+  "name": "korea-university-launcher",
+  "version": "0.1.0",
+  "description": "Korea University Unified Launcher (LMS & Portal)",
+  "main": "main.js",
+  "scripts": {
+    "start": "electron ."
+  },
+  "keywords": [],
+  "author": "KOREA ONE",
+  "license": "MIT",
+  "type": "commonjs",
+  "devDependencies": {
+    "electron": "^38.1.2"
+  },
+  "dependencies": {
+    "keytar": "^7.9.0"
+  }
+}
