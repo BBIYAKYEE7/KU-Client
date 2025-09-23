@@ -1,0 +1,101 @@
+{
+  "name": "korea-university-portal",
+  "version": "1.1.2",
+  "description": "고려대학교 포털 데스크탑 앱",
+  "main": "main.js",
+  "scripts": {
+    "start": "electron .",
+    "dev": "electron . --dev",
+    "build": "electron-builder",
+    "dist": "electron-builder --publish=never",
+    "build:win-x64": "electron-builder --win --x64",
+    "build:win-x86": "electron-builder --win --ia32",
+    "build:win-arm64": "electron-builder --win --arm64",
+    "build:mac-x64": "electron-builder --mac --x64",
+    "build:mac-arm64": "electron-builder --mac --arm64",
+    "build:linux-x64": "electron-builder --linux --x64",
+    "build:linux-arm64": "electron-builder --linux --arm64",
+    "build:win": "electron-builder --win --x64 --ia32 --arm64",
+    "build:mac": "electron-builder --mac --x64 --arm64",
+    "build:linux": "electron-builder --linux --x64 --arm64",
+    "build:all": "npm run build:win && npm run build:mac && npm run build:linux"
+  },
+  "keywords": [
+    "electron",
+    "korea-university",
+    "portal",
+    "desktop-app"
+  ],
+  "author": "BBIYAKYEE7(김재윤)",
+  "license": "MIT",
+  "devDependencies": {
+    "electron": "^25.9.8",
+    "electron-builder": "^24.6.4"
+  },
+  "dependencies": {
+    "node-notifier": "^10.0.1"
+  },
+  "build": {
+    "appId": "com.kupid.portal",
+    "productName": "고려대학교 포털",
+    "artifactName": "Setup-${os}-${arch}.${ext}",
+    "directories": {
+      "output": "dist"
+    },
+    "files": [
+      "main.js",
+      "renderer.js",
+      "preload.js",
+      "webview-preload.js",
+      "auto-updater.js",
+      "index.html",
+      "styles.css",
+      "login-setup.html",
+      "login-setup.css",
+      "login-setup.js",
+      "config.js",
+      "config.json",
+      "fonts/**/*",
+      "images/**/*",
+      "node_modules/**/*"
+    ],
+    "mac": {
+      "category": "public.app-category.education",
+      "icon": "images/korea.png",
+      "target": [
+        {
+          "target": "dmg",
+          "arch": ["x64", "arm64"]
+        }
+      ]
+    },
+    "win": {
+      "icon": "images/korea.png",
+      "target": [
+        {
+          "target": "nsis",
+          "arch": ["x64"]
+        }
+      ]
+    },
+    "linux": {
+      "icon": "images/korea.png",
+      "maintainer": "BBIYAKYEE7(김재윤) <bbiyakyee7@gmail.com>",
+      "target": [
+        {
+          "target": "deb",
+          "arch": ["x64", "arm64"]
+        }
+      ]
+    },
+    "nsis": {
+      "oneClick": false,
+      "allowToChangeInstallationDirectory": true,
+      "createDesktopShortcut": true,
+      "createStartMenuShortcut": true,
+      "shortcutName": "고려대학교 포털",
+      "installerLanguages": ["ko-KR"],
+      "language": "1042"
+    }
+  }
+}

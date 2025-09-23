@@ -1,0 +1,521 @@
+/* Pretendard 폰트 정의 (Variable 폰트 방식) */
+@font-face {
+  font-family: 'Pretendard';
+  src: url('./fonts/Pretendard-Regular.woff2') format('woff2');
+  font-weight: 100 900;
+  font-style: normal;
+  font-display: swap;
+}
+
+@font-face {
+  font-family: 'Pretendard';
+  src: url('./fonts/Pretendard-Bold.woff2') format('woff2');
+  font-weight: 700;
+  font-style: normal;
+  font-display: swap;
+}
+
+/* 모든 요소에 Pretendard 폰트 강제 적용 (깜빡임 방지) */
+* {
+  font-family: 'Pretendard', -apple-system, BlinkMacSystemFont, 'Segoe UI', Roboto, 'Helvetica Neue', Arial, sans-serif !important;
+  font-display: swap;
+}
+
+/* 바탕체 관련 클래스 강제 제거 */
+.batang, .batang *, [class*="batang"], [class*="Batang"], .gulim, .gulim *, [class*="gulim"], [class*="Gulim"] {
+  font-family: 'Pretendard', -apple-system, BlinkMacSystemFont, 'Segoe UI', Roboto, 'Helvetica Neue', Arial, sans-serif !important;
+  font-display: swap;
+}
+
+/* 인라인 스타일 무시 */
+[style*="font-family"], [style*="fontFamily"] {
+  font-family: 'Pretendard', -apple-system, BlinkMacSystemFont, 'Segoe UI', Roboto, 'Helvetica Neue', Arial, sans-serif !important;
+  font-display: swap;
+}
+
+/* CSS 변수 재정의 */
+:root {
+  --font-family: 'Pretendard', -apple-system, BlinkMacSystemFont, 'Segoe UI', Roboto, 'Helvetica Neue', Arial, sans-serif !important;
+  --font-display: swap;
+}
+
+/* 기본 리셋 */
+* {
+    margin: 0;
+    padding: 0;
+    box-sizing: border-box;
+}
+
+body {
+    font-family: 'Pretendard', -apple-system, BlinkMacSystemFont, 'Segoe UI', Roboto, 'Helvetica Neue', Arial, sans-serif;
+    background-color: #f5f5f5;
+    overflow: hidden;
+    height: 100vh;
+}
+
+/* 고정된 상단 상태 바 */
+.top-status-bar {
+    position: fixed;
+    top: 0;
+    left: 0;
+    right: 0;
+    height: 45px;
+    background: linear-gradient(135deg, #8B0026 0%, #A00030 100%);
+    color: white;
+    z-index: 10000;
+    box-shadow: 0 2px 8px rgba(0,0,0,0.3);
+    border-bottom: 2px solid rgba(255,255,255,0.2);
+}
+
+.status-content {
+    display: flex;
+    justify-content: space-between;
+    align-items: center;
+    height: 100%;
+    padding: 0 20px;
+}
+
+/* 앱 로고 */
+.app-logo {
+    display: flex;
+    align-items: center;
+    gap: 10px;
+}
+
+.ku-logo-small {
+    height: 14px;
+    width: auto;
+    filter: brightness(0) invert(1); /* 흰색으로 변경 */
+    image-rendering: -webkit-optimize-contrast;
+    image-rendering: crisp-edges;
+    -webkit-font-smoothing: antialiased;
+    -moz-osx-font-smoothing: grayscale;
+    transform: scale(1);
+    backface-visibility: hidden;
+}
+
+.ku-emblem-small {
+    height: 18px;
+    width: auto;
+    filter: brightness(0) invert(1); /* 흰색으로 변경 */
+    image-rendering: -webkit-optimize-contrast;
+    image-rendering: crisp-edges;
+    -webkit-font-smoothing: antialiased;
+    -moz-osx-font-smoothing: grayscale;
+    transform: scale(1);
+    backface-visibility: hidden;
+}
+
+.app-title {
+    font-weight: 700;
+    font-size: 18px;
+    letter-spacing: 1px;
+    text-shadow: 0 1px 2px rgba(0,0,0,0.3);
+}
+
+.session-info {
+    display: flex;
+    align-items: center;
+    gap: 15px;
+}
+
+.session-timer {
+    font-weight: 700;
+    font-size: 14px;
+    text-shadow: 0 1px 2px rgba(0,0,0,0.3);
+    letter-spacing: 0.5px;
+    min-width: 100px;
+}
+
+.session-progress {
+    width: 200px;
+    height: 8px;
+    background-color: rgba(255,255,255,0.3);
+    border-radius: 4px;
+    overflow: hidden;
+    border: 1px solid rgba(255,255,255,0.2);
+}
+
+.session-progress-fill {
+    height: 100%;
+    background: linear-gradient(90deg, #D6CABC, #E8DCC8);
+    border-radius: 5px;
+    transition: width 1s ease-in-out;
+    width: 100%;
+    box-shadow: 0 0 6px rgba(214, 202, 188, 0.6);
+}
+
+.session-progress-fill.warning {
+    background: linear-gradient(90deg, #FF9800, #FFC107);
+}
+
+.session-progress-fill.danger {
+    background: linear-gradient(90deg, #F44336, #FF5722);
+}
+
+.status-controls {
+    display: flex;
+    gap: 10px;
+    align-items: center;
+}
+
+.login-settings-btn, .update-btn {
+    background: rgba(255,255,255,0.2);
+    border: 1px solid rgba(255,255,255,0.4);
+    color: white;
+    padding: 6px 10px;
+    border-radius: 5px;
+    cursor: pointer;
+    font-size: 12px;
+    font-weight: 500;
+    transition: all 0.2s ease;
+}
+
+.login-settings-btn:hover, .update-btn:hover {
+    background: rgba(255,255,255,0.3);
+    transform: translateY(-1px);
+}
+
+.update-btn {
+    background: rgba(255, 193, 7, 0.3);
+    border-color: rgba(255, 193, 7, 0.5);
+}
+
+.update-btn:hover {
+    background: rgba(255, 193, 7, 0.4);
+    border-color: rgba(255, 193, 7, 0.6);
+}
+
+.refresh-btn, .home-btn {
+    background: rgba(255,255,255,0.2);
+    border: 1px solid rgba(255,255,255,0.4);
+    color: white;
+    padding: 6px 10px;
+    border-radius: 5px;
+    cursor: pointer;
+    font-size: 12px;
+    font-weight: 500;
+    transition: all 0.2s ease;
+}
+
+.refresh-btn:hover, .home-btn:hover {
+    background: rgba(255,255,255,0.3);
+    transform: translateY(-1px);
+}
+
+/* 메인 콘텐츠 영역 */
+.main-content {
+    margin-top: 45px;
+    height: calc(100vh - 45px);
+    position: relative;
+}
+
+.webview-container {
+    width: 100%;
+    height: 100%;
+    position: relative;
+}
+
+.portal-webview {
+    width: 100%;
+    height: 100%;
+    border: none;
+    position: relative;
+    z-index: 1;
+}
+
+/* 모달 스타일 */
+.modal {
+    position: fixed;
+    top: 0;
+    left: 0;
+    width: 100%;
+    height: 100%;
+    background-color: rgba(0,0,0,0.6);
+    display: flex;
+    justify-content: center;
+    align-items: center;
+    z-index: 20000;
+    backdrop-filter: blur(4px);
+}
+
+.modal.hidden {
+    display: none;
+}
+
+.modal-content {
+    background: white;
+    border-radius: 12px;
+    box-shadow: 0 20px 40px rgba(0,0,0,0.3);
+    max-width: 450px;
+    width: 90%;
+    overflow: hidden;
+    animation: modalSlideIn 0.3s ease-out;
+}
+
+/* 로그인 설정 모달 특별 스타일 */
+.setup-modal {
+    max-width: 500px;
+    width: 95%;
+}
+
+.setup-modal .modal-header {
+    background: linear-gradient(135deg, #8B0026 0%, #A00030 100%);
+    color: white;
+    padding: 30px 30px 20px;
+    text-align: center;
+    overflow: visible;
+    min-height: auto;
+}
+
+.setup-modal .logo-container {
+    display: flex;
+    justify-content: center;
+    align-items: center;
+    gap: 15px;
+    margin-bottom: 15px;
+}
+
+.setup-modal .ku-logo {
+    height: 30px;
+    width: auto;
+    filter: brightness(0) invert(1);
+    image-rendering: -webkit-optimize-contrast;
+    image-rendering: crisp-edges;
+    transform: scale(1);
+    backface-visibility: hidden;
+}
+
+.setup-modal .ku-emblem {
+    height: 30px;
+    width: auto;
+    filter: brightness(0) invert(1);
+    image-rendering: -webkit-optimize-contrast;
+    image-rendering: crisp-edges;
+    transform: scale(1);
+    backface-visibility: hidden;
+}
+
+.setup-modal .slogan-container {
+    margin-bottom: 15px;
+}
+
+.setup-modal .ku-slogan {
+    height: 25px;
+    width: auto;
+    filter: brightness(0) invert(1);
+    image-rendering: -webkit-optimize-contrast;
+    image-rendering: crisp-edges;
+    transform: scale(1);
+    backface-visibility: hidden;
+}
+
+
+
+.setup-modal .setup-form {
+    padding: 0;
+}
+
+.setup-modal .form-actions {
+    margin-top: 20px;
+}
+
+@keyframes modalSlideIn {
+    from {
+        opacity: 0;
+        transform: translateY(-20px) scale(0.95);
+    }
+    to {
+        opacity: 1;
+        transform: translateY(0) scale(1);
+    }
+}
+
+.modal-header {
+    background: linear-gradient(135deg, #8B0026 0%, #A00030 100%);
+    color: white;
+    padding: 20px;
+    text-align: center;
+}
+
+.modal-header h3 {
+    margin: 0;
+    font-size: 18px;
+    font-weight: 600;
+}
+
+.modal-body {
+    padding: 24px;
+}
+
+.modal-body p {
+    margin-bottom: 16px;
+    color: #333;
+    font-size: 16px;
+    line-height: 1.5;
+}
+
+.countdown {
+    font-size: 32px;
+    font-weight: bold;
+    color: #F44336;
+    margin: 16px 0;
+    font-family: 'Courier New', monospace;
+    text-align: center;
+}
+
+.modal-footer {
+    padding: 16px 24px 24px;
+    display: flex;
+    gap: 12px;
+    justify-content: center;
+}
+
+/* 폼 스타일 */
+.form-group {
+    margin-bottom: 20px;
+}
+
+.form-group label {
+    display: block;
+    margin-bottom: 8px;
+    font-weight: 600;
+    color: #333;
+    font-size: 14px;
+}
+
+.form-group input[type="text"],
+.form-group input[type="password"] {
+    width: 100%;
+    padding: 12px 16px;
+    border: 2px solid #e1e5e9;
+    border-radius: 8px;
+    font-size: 16px;
+    transition: all 0.3s ease;
+    background-color: #f8f9fa;
+}
+
+.form-group input[type="text"]:focus,
+.form-group input[type="password"]:focus {
+    outline: none;
+    border-color: #8B0026;
+    background-color: white;
+    box-shadow: 0 0 0 3px rgba(139, 0, 38, 0.1);
+}
+
+.checkbox-group {
+    display: flex;
+    align-items: center;
+}
+
+.checkbox-group label {
+    display: flex;
+    align-items: center;
+    margin-bottom: 0;
+    cursor: pointer;
+    font-weight: normal;
+}
+
+.checkbox-group input[type="checkbox"] {
+    margin-right: 12px;
+    width: 18px;
+    height: 18px;
+    accent-color: #8B0026;
+}
+
+.checkbox-group span {
+    font-size: 14px;
+    color: #333;
+}
+
+/* 버튼 스타일 */
+.btn {
+    padding: 12px 24px;
+    border: none;
+    border-radius: 8px;
+    cursor: pointer;
+    font-size: 14px;
+    font-weight: 600;
+    transition: all 0.3s ease;
+    min-width: 100px;
+}
+
+.btn-primary {
+    background: linear-gradient(135deg, #8B0026 0%, #A00030 100%);
+    color: white;
+}
+
+.btn-primary:hover {
+    transform: translateY(-2px);
+    box-shadow: 0 4px 12px rgba(139, 0, 38, 0.4);
+}
+
+.btn-secondary {
+    background-color: #f5f5f5;
+    color: #333;
+    border: 1px solid #ddd;
+}
+
+.btn-secondary:hover {
+    background-color: #e9e9e9;
+    transform: translateY(-1px);
+}
+
+.btn-danger {
+    background-color: #f44336;
+    color: white;
+}
+
+.btn-danger:hover {
+    background-color: #d32f2f;
+    transform: translateY(-2px);
+    box-shadow: 0 4px 12px rgba(244, 67, 54, 0.4);
+}
+
+/* 애니메이션 */
+@keyframes pulse {
+    0% { transform: scale(1); }
+    50% { transform: scale(1.05); }
+    100% { transform: scale(1); }
+}
+
+.session-timer.warning {
+    animation: pulse 2s infinite;
+    color: #FF9800;
+}
+
+.session-timer.danger {
+    animation: pulse 1s infinite;
+    color: #F44336;
+}
+
+/* 반응형 디자인 */
+@media (max-width: 768px) {
+    .status-content {
+        padding: 0 15px;
+    }
+    
+    .session-timer {
+        font-size: 14px;
+        min-width: 80px;
+    }
+    
+    .session-progress {
+        width: 150px;
+    }
+    
+    .login-settings-btn {
+        padding: 8px 12px;
+        font-size: 12px;
+    }
+    
+    .refresh-btn, .home-btn {
+        padding: 6px 10px;
+        font-size: 12px;
+    }
+    
+    .modal-content {
+        margin: 20px;
+        width: calc(100% - 40px);
+    }
+}
