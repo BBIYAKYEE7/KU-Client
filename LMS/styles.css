@@ -202,6 +202,51 @@ body {
     color: white;
 }
 
+/* 체크박스 스타일 */
+.checkbox-container {
+    display: flex;
+    align-items: center;
+    cursor: pointer;
+    font-size: 14px;
+    color: #333;
+    margin-bottom: 10px;
+}
+
+.checkbox-container input[type="checkbox"] {
+    display: none;
+}
+
+.checkmark {
+    width: 20px;
+    height: 20px;
+    border: 2px solid #ddd;
+    border-radius: 4px;
+    margin-right: 10px;
+    position: relative;
+    transition: all 0.3s ease;
+}
+
+.checkbox-container input[type="checkbox"]:checked + .checkmark {
+    background-color: var(--ku-burgundy);
+    border-color: var(--ku-burgundy);
+}
+
+.checkbox-container input[type="checkbox"]:checked + .checkmark::after {
+    content: '';
+    position: absolute;
+    left: 6px;
+    top: 2px;
+    width: 6px;
+    height: 10px;
+    border: solid white;
+    border-width: 0 2px 2px 0;
+    transform: rotate(45deg);
+}
+
+.checkbox-container:hover .checkmark {
+    border-color: var(--ku-burgundy);
+}
+
 .status-message { position: absolute; top: -60px; left: 50%; transform: translateX(-50%); background: #ff4757; color: white; padding: 12px 20px; border-radius: 8px; font-size: 14px; box-shadow: 0 4px 12px rgba(255, 71, 87, 0.3); z-index: 1000; }
 .status-message.success { background: #2ed573; box-shadow: 0 4px 12px rgba(46, 213, 115, 0.3); }
 .status-message.warning { background: #ffa502; box-shadow: 0 4px 12px rgba(255, 165, 2, 0.3); }

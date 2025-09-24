@@ -10,6 +10,8 @@ document.addEventListener('DOMContentLoaded', () => {
   const setupPortalPass = document.getElementById('setup-portal-pass');
   const setupSave = document.getElementById('setup-save');
   const setupCancel = document.getElementById('setup-cancel');
+  const setupDelete = document.getElementById('setup-delete');
+  const openSetup = document.getElementById('open-setup');
 
   // 부팅화면 관리
   const BootScreen = {
@@ -22,17 +24,17 @@ document.addEventListener('DOMContentLoaded', () => {
         const header = document.querySelector('.header');
         const actions = document.querySelector('.actions');
         const footer = document.querySelector('.footer');
-        const themeToggleEl = document.querySelector('.theme-toggle');
+        const themeToggleEls = document.querySelectorAll('.theme-toggle');
         if (bootLoader) bootLoader.classList.add('hidden');
         if (header) header.style.display = 'flex';
         if (actions) actions.style.display = 'grid';
         if (footer) footer.style.display = 'flex';
-        if (themeToggleEl) themeToggleEl.style.display = 'flex';
+        themeToggleEls.forEach(el => el.style.display = 'flex');
         if (brandLogo) brandLogo.classList.add('fade-in');
         // 초기 표시 애니메이션 적용
         if (actions) actions.classList.add('show');
         if (footer) footer.classList.add('show');
-        if (themeToggleEl) themeToggleEl.classList.add('show');
+        themeToggleEls.forEach(el => el.classList.add('show'));
         return;
       }
       console.log('부팅화면 시작');
@@ -41,12 +43,12 @@ document.addEventListener('DOMContentLoaded', () => {
       const header = document.querySelector('.header');
       const actions = document.querySelector('.actions');
       const footer = document.querySelector('.footer');
-      const themeToggle = document.querySelector('.theme-toggle');
+      const themeToggleEls = document.querySelectorAll('.theme-toggle');
       
       if (header) header.style.display = 'none';
       if (actions) actions.style.display = 'none';
       if (footer) footer.style.display = 'none';
-      if (themeToggle) themeToggle.style.display = 'none';
+      themeToggleEls.forEach(el => el.style.display = 'none');
       
       // 2.5초간 로딩 애니메이션 표시
       await new Promise(resolve => setTimeout(resolve, 2500));
@@ -68,7 +70,7 @@ document.addEventListener('DOMContentLoaded', () => {
       setTimeout(() => {
         if (actions) actions.style.display = 'grid';
         if (footer) footer.style.display = 'flex';
-        if (themeToggle) themeToggle.style.display = 'flex';
+        themeToggleEls.forEach(el => el.style.display = 'flex');
       }, 200);
       
       // 버튼들과 요소들 순차적 페이드인
@@ -81,7 +83,7 @@ document.addEventListener('DOMContentLoaded', () => {
       }, 600);
       
       setTimeout(() => {
-        if (themeToggle) themeToggle.classList.add('show');
+        themeToggleEls.forEach(el => el.classList.add('show'));
       }, 800);
     }
   };
@@ -157,27 +159,90 @@ document.addEventListener('DOMContentLoaded', () => {
     ThemeManager.toggle();
   });
 
+  // 설정 버튼: 언제든 모달 열기
+  openSetup?.addEventListener('click', async () => {
+    try {
+      const account = localStorage.getItem('kupid-account') || '';
+      if (setupAccount) setupAccount.value = account;
+      if (setupModal) setupModal.classList.add('show');
+    } catch (_) {}
+  });
+
   // 포털 버튼
   portal?.addEventListener('click', async () => {
     portal.classList.add('clicked');
     setTimeout(() => portal.classList.remove('clicked'), 180);
     if (window.launcher && window.launcher.openPortal) {
       const account = localStorage.getItem('kupid-account') || '';
+      console.log('포털 버튼 클릭, 저장된 계정:', account);
+      
       let password = '';
       if (account && window.launcher.loadCredentials) {
-        // 포털/LMS 공통 비밀번호로 통합 저장
-        password = await window.launcher.loadCredentials({ account: 'kupid:' + account }) || '';
+        console.log('자격 증명 로드 시도:', 'kupid:' + account);
+        try {
+          // 포털/LMS 공통 비밀번호로 통합 저장
+          password = await window.launcher.loadCredentials({ account: 'kupid:' + account }) || '';
+          console.log('로드된 비밀번호 길이:', password ? password.length : 0);
+          console.log('로드된 비밀번호 존재:', !!password);
+        } catch (error) {
+          console.error('자격 증명 로드 오류:', error);
+        }
+      } else {
+        console.log('계정이 없거나 loadCredentials 함수가 없음');
       }
+      
+      console.log('포털 열기 시도:', { account, hasPassword: !!password });
       window.launcher.openPortal({ account, password });
     }
   });
 
   // LMS 버튼
-  lms?.addEventListener('click', () => {
+  lms?.addEventListener('click', async () => {
     lms.classList.add('clicked');
     setTimeout(() => lms.classList.remove('clicked'), 180);
     if (window.launcher && window.launcher.openLMS) {
-      window.launcher.openLMS();
+      const account = localStorage.getItem('kupid-account') || '';
+      console.log('LMS 버튼 클릭, 저장된 계정:', account);
+      
+      let password = '';
+      if (account && window.launcher.loadCredentials) {
+        console.log('LMS 자격 증명 로드 시도:', 'kupid:' + account);
+        try {
+          // 포털/LMS 공통 비밀번호로 통합 저장 (동일한 자격 증명 사용)
+          password = await window.launcher.loadCredentials({ account: 'kupid:' + account }) || '';
+          console.log('LMS 로드된 비밀번호 길이:', password ? password.length : 0);
+          console.log('LMS 로드된 비밀번호 존재:', !!password);
+          console.log('LMS 로드된 비밀번호 값:', password ? '[HIDDEN]' : null);
+        } catch (error) {
+          console.error('LMS 자격 증명 로드 오류:', error);
+        }
+      } else {
+        console.log('LMS 계정이 없거나 loadCredentials 함수가 없음');
+        console.log('LMS 계정 존재:', !!account);
+        console.log('LMS loadCredentials 함수 존재:', !!window.launcher.loadCredentials);
+      }
+      
+      console.log('LMS 열기 시도:', { account, hasPassword: !!password });
+      console.log('LMS 전달할 자격 증명:', { account, password: password ? '[HIDDEN]' : null });
+      
+      // 자격 증명이 없으면 포털과 동일한 자격 증명을 사용
+      if (!account || !password) {
+        console.log('LMS 자격 증명이 없어서 포털과 동일한 자격 증명 사용');
+        // 포털에서 사용한 자격 증명을 다시 로드
+        const portalAccount = localStorage.getItem('kupid-account') || '';
+        if (portalAccount && window.launcher.loadCredentials) {
+          try {
+            const portalPassword = await window.launcher.loadCredentials({ account: 'kupid:' + portalAccount }) || '';
+            console.log('LMS 포털 자격 증명 재로드:', { account: portalAccount, hasPassword: !!portalPassword });
+            window.launcher.openLMS({ account: portalAccount, password: portalPassword });
+            return;
+          } catch (error) {
+            console.error('LMS 포털 자격 증명 재로드 오류:', error);
+          }
+        }
+      }
+      
+      window.launcher.openLMS({ account, password });
     }
   });
 
@@ -206,11 +271,14 @@ document.addEventListener('DOMContentLoaded', () => {
   (async () => {
     try {
       const lastAccount = localStorage.getItem('kupid-account') || '';
+      console.log('저장된 계정 확인:', lastAccount);
       if (setupAccount) setupAccount.value = lastAccount;
       const account = lastAccount;
       let hasAny = false;
       if (account) {
+        console.log('자격 증명 로드 시도:', 'kupid:' + account);
         const common = await loadLogin('kupid:' + account);
+        console.log('로드된 자격 증명:', !!common);
         hasAny = !!common;
       }
       // 로딩 UI가 사라진 뒤에 모달을 표시
@@ -220,14 +288,37 @@ document.addEventListener('DOMContentLoaded', () => {
         }
       };
       if (!hasAny) {
-        const params = new URLSearchParams(window.location.search);
-        const shouldSkip = params.get('skipBoot') === '1';
-        if (shouldSkip) {
-          // 로딩을 건너뛴 경우 약간 지연 후 표시
-          setTimeout(showModal, 200);
-        } else {
-          // 부팅 로더가 2.5s 후 숨겨지므로 조금 더 딜레이 후 표시
-          setTimeout(showModal, 2800);
+        // 자격 증명이 없으면 KUPID 설정에서 자동 마이그레이션 시도
+        try {
+          if (window.launcher && window.launcher.migrateFromKupidConfig) {
+            console.log('KUPID 설정 마이그레이션 시도');
+            const migrated = await window.launcher.migrateFromKupidConfig();
+            if (migrated && migrated.account && migrated.password) {
+              console.log('마이그레이션 성공, 계정/비밀번호 저장 진행');
+              localStorage.setItem('kupid-account', migrated.account);
+              await saveLogin('kupid:' + migrated.account, migrated.password);
+              hasAny = true;
+              if (setupAccount) setupAccount.value = migrated.account;
+            } else {
+              console.log('마이그레이션 결과가 없거나 불완전');
+            }
+          }
+        } catch (e) {
+          console.error('마이그레이션 중 오류:', e);
+        }
+
+        // 자격 증명이 여전히 없으면 강제로 모달 표시
+        if (!hasAny) {
+          console.log('자격 증명이 없어서 설정 모달을 강제로 표시합니다');
+          const params = new URLSearchParams(window.location.search);
+          const shouldSkip = params.get('skipBoot') === '1';
+          if (shouldSkip) {
+            // 로딩을 건너뛴 경우 약간 지연 후 표시
+            setTimeout(showModal, 200);
+          } else {
+            // 부팅 로더가 2.5s 후 숨겨지므로 조금 더 딜레이 후 표시
+            setTimeout(showModal, 2800);
+          }
         }
       }
     } catch (e) {}
@@ -239,17 +330,67 @@ document.addEventListener('DOMContentLoaded', () => {
     setupModal.classList.remove('show');
   });
 
+  // 로그인 정보 삭제 버튼
+  setupDelete?.addEventListener('click', async () => {
+    try {
+      const account = (setupAccount?.value || localStorage.getItem('kupid-account') || '').trim();
+      if (!account) {
+        alert('삭제할 학번을 먼저 입력하거나 저장된 계정이 없습니다.');
+        return;
+      }
+      await deleteLogin('kupid:' + account);
+      localStorage.removeItem('kupid-account');
+      if (setupPortalPass) setupPortalPass.value = '';
+      alert('로그인 정보가 삭제되었습니다.');
+    } catch (e) {
+      console.error('로그인 정보 삭제 오류:', e);
+      alert('삭제 중 오류가 발생했습니다.');
+    }
+  });
+
   setupSave?.addEventListener('click', async () => {
     const account = (setupAccount?.value || '').trim();
     const portalPw = setupPortalPass?.value || '';
+    console.log('자격 증명 저장 시도:', { account, hasPassword: !!portalPw });
+    
     if (!account) {
       alert('학번을 입력하세요.');
       return;
     }
+    
     localStorage.setItem('kupid-account', account);
+    console.log('계정 저장 완료:', account);
+    
     // 공통 비밀번호로 통합 저장 (포털/LMS 동일 자격 증명)
     const commonPw = portalPw;
-    if (commonPw) await saveLogin('kupid:' + account, commonPw);
+    if (commonPw) {
+      console.log('비밀번호 저장 시도:', 'kupid:' + account);
+      try {
+        const result = await saveLogin('kupid:' + account, commonPw);
+        console.log('비밀번호 저장 결과:', result);
+        
+        // 저장 후 즉시 로드 테스트
+        setTimeout(async () => {
+          try {
+            const testLoad = await loadLogin('kupid:' + account);
+            console.log('저장 후 로드 테스트:', { 
+              hasPassword: !!testLoad, 
+              passwordLength: testLoad ? testLoad.length : 0 
+            });
+            if (testLoad) {
+              console.log('자격 증명 저장 및 로드 성공!');
+            } else {
+              console.error('자격 증명 저장 후 로드 실패!');
+            }
+          } catch (error) {
+            console.error('저장 후 로드 테스트 오류:', error);
+          }
+        }, 100);
+      } catch (error) {
+        console.error('비밀번호 저장 오류:', error);
+      }
+    }
+    
     if (setupModal) setupModal.classList.remove('show');
     // 민감정보 메모리에서 제거
     if (setupPortalPass) setupPortalPass.value = '';

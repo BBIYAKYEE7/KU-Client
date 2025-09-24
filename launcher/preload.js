@@ -12,7 +12,9 @@ contextBridge.exposeInMainWorld('launcher', {
   // 자격 증명 API
   saveCredentials: ({ account, password }) => ipcRenderer.invoke('creds-save', { account, password }),
   loadCredentials: ({ account }) => ipcRenderer.invoke('creds-load', { account }),
-  deleteCredentials: ({ account }) => ipcRenderer.invoke('creds-delete', { account })
+  deleteCredentials: ({ account }) => ipcRenderer.invoke('creds-delete', { account }),
+  // KUPID 설정에서 마이그레이션
+  migrateFromKupidConfig: () => ipcRenderer.invoke('migrate-from-kupid-config')
 });
 
 // ===== 빠른 포털 자동 로그인 주입 =====
@@ -20,92 +22,408 @@ contextBridge.exposeInMainWorld('launcher', {
 (function fastPortalAutoLogin() {
   let creds = null;
   ipcRenderer.on('portal-credentials', (_e, payload) => {
+    console.log('preload에서 자격 증명 수신:', payload);
     creds = payload || null;
+    if (creds) {
+      console.log('자격 증명 수신 완료:', {
+        hasAccount: !!creds.account,
+        hasPassword: !!creds.password,
+        accountLength: creds.account ? creds.account.length : 0,
+        passwordLength: creds.password ? creds.password.length : 0
+      });
+    } else {
+      console.log('자격 증명이 null 또는 undefined입니다');
+    }
     tryInject();
   });
 
   function isPortalLogin() {
     try {
-      return /portal\.korea\.ac\.kr\/common\/Login\.kpd/.test(location.href);
-    } catch { return false; }
+      const currentUrl = location.href;
+      console.log('현재 URL 확인:', currentUrl);
+      
+      // 다양한 포털 로그인 페이지 패턴 확인
+      const isLoginPage = /portal\.korea\.ac\.kr\/common\/Login\.kpd/.test(currentUrl) ||
+                         /portal\.korea\.ac\.kr.*Login/.test(currentUrl) ||
+                         /portal\.korea\.ac\.kr/.test(currentUrl);
+      
+      // DOM 요소로도 확인
+      const hasLoginForm = document.getElementById('oneid') || 
+                          document.getElementById('one_id') ||
+                          document.querySelector('input[placeholder*="KUPID"]') ||
+                          document.querySelector('input[placeholder*="Single ID"]') ||
+                          document.querySelector('input[type="password"]');
+      
+      console.log('포털 로그인 페이지 여부:', isLoginPage);
+      console.log('로그인 폼 요소 존재:', !!hasLoginForm);
+      
+      return isLoginPage || !!hasLoginForm;
+    } catch (error) {
+      console.error('URL 확인 오류:', error);
+      return false;
+    }
   }
 
   function fillAndSubmit() {
     try {
       if (!creds || !creds.account || !creds.password) return false;
-      var idEl = document.getElementById('oneid');
-      var pwEl = document.getElementById('_pw');
+      
+      // 다양한 방법으로 로그인 필드 찾기
+      var idEl = document.getElementById('oneid') || 
+                 document.getElementById('one_id') ||
+                 document.querySelector('input[name="oneid"]') ||
+                 document.querySelector('input[name="one_id"]') ||
+                 document.querySelector('input[placeholder*="KUPID"]') ||
+                 document.querySelector('input[placeholder*="Single ID"]') ||
+                 document.querySelector('input[type="text"]');
+      
+      var pwEl = document.getElementById('_pw') ||
+                 document.getElementById('password') ||
+                 document.querySelector('input[name="_pw"]') ||
+                 document.querySelector('input[name="password"]') ||
+                 document.querySelector('input[placeholder*="Password"]') ||
+                 document.querySelector('input[type="password"]');
+      
+      console.log('포털 자동 로그인 시도:', {
+        idEl: !!idEl,
+        pwEl: !!pwEl,
+        idElId: idEl ? idEl.id : null,
+        pwElId: pwEl ? pwEl.id : null,
+        account: creds.account
+      });
+      
       if (!idEl || !pwEl) return false;
+      
+      // 기존 값 지우기
+      idEl.value = '';
+      pwEl.value = '';
+      
+      // 로그인 정보 입력
       idEl.value = creds.account;
       pwEl.value = creds.password;
-      var btn = document.getElementById('loginsubmit');
-      if (btn) { btn.click(); return true; }
-      var form = idEl && idEl.form ? idEl.form : document.querySelector('form[action*="/common/Login.kpd"]');
-      if (form) { form.submit(); return true; }
+      
+      // 입력 이벤트 발생
+      idEl.dispatchEvent(new Event('input', { bubbles: true }));
+      pwEl.dispatchEvent(new Event('input', { bubbles: true }));
+      idEl.dispatchEvent(new Event('change', { bubbles: true }));
+      pwEl.dispatchEvent(new Event('change', { bubbles: true }));
+      
+      // 로그인 버튼 찾기
+      var btn = document.getElementById('loginsubmit') ||
+                document.querySelector('input[type="submit"]') ||
+                document.querySelector('button[type="submit"]') ||
+                document.querySelector('input[value="Login"]') ||
+                document.querySelector('input[value="로그인"]') ||
+                document.querySelector('button[onclick*="login"]') ||
+                document.querySelector('button[onclick*="Login"]');
+      
+      if (btn) { 
+        console.log('로그인 버튼 클릭 시도');
+        btn.click(); 
+        return true; 
+      }
+      
+      // 폼 제출 시도
+      var form = idEl && idEl.form ? idEl.form : 
+                 document.querySelector('form[action*="/common/Login.kpd"]') ||
+                 document.querySelector('form[action*="/Login.kpd"]') ||
+                 document.querySelector('form[method="post"]');
+      
+      if (form) { 
+        console.log('폼 제출 시도');
+        form.submit(); 
+        return true; 
+      }
+      
+      // Enter 키 시뮬레이션
+      console.log('Enter 키 시뮬레이션');
+      pwEl.dispatchEvent(new KeyboardEvent('keydown', { key: 'Enter', code: 'Enter', keyCode: 13, which: 13, bubbles: true }));
+      return true;
+    } catch (error) {
+      console.error('포털 자동 로그인 오류:', error);
       return false;
-    } catch { return false; }
+    }
   }
 
   function tryInject() {
-    if (!isPortalLogin()) return;
-    if (fillAndSubmit()) return;
-    const obs = new MutationObserver((_m, o) => { if (fillAndSubmit()) { o.disconnect(); } });
+    console.log('포털 자동 로그인 시도 시작');
+    
+    // 자격 증명이 없으면 시도하지 않음
+    if (!creds || !creds.account || !creds.password) {
+      console.log('자격 증명이 없어서 자동 로그인 중단');
+      return;
+    }
+    
+    if (!isPortalLogin()) {
+      console.log('포털 로그인 페이지가 아님');
+      return;
+    }
+    
+    console.log('포털 로그인 페이지 감지됨, 자동 로그인 시도');
+    if (fillAndSubmit()) {
+      console.log('자동 로그인 성공');
+      return;
+    }
+    
+    console.log('첫 번째 시도 실패, DOM 변화 감지 시작');
+    const obs = new MutationObserver((_m, o) => { 
+      if (fillAndSubmit()) { 
+        console.log('DOM 변화 감지로 자동 로그인 성공');
+        o.disconnect(); 
+      } 
+    });
     obs.observe(document.documentElement, { childList: true, subtree: true });
+    
     // 안전망: 아주 빠른 재시도 몇 번
     let tries = 0;
     const t = setInterval(() => {
       tries++;
-      if (fillAndSubmit() || tries > 20) clearInterval(t);
+      console.log(`자동 로그인 재시도 ${tries}/20`);
+      if (fillAndSubmit() || tries > 20) {
+        console.log(tries > 20 ? '최대 재시도 횟수 초과' : '자동 로그인 성공');
+        clearInterval(t);
+        obs.disconnect();
+      }
     }, 25);
   }
 
   // DOM 상태 변화에 맞춰 최대한 빠르게 시도
   document.addEventListener('readystatechange', () => { tryInject(); }, true);
   document.addEventListener('DOMContentLoaded', () => { tryInject(); }, true);
+  
+  // 추가적인 이벤트 리스너
+  window.addEventListener('load', () => { 
+    console.log('윈도우 로드 완료, 자동 로그인 재시도');
+    setTimeout(tryInject, 100); 
+  });
+  
+  // 페이지가 완전히 로드된 후에도 시도
+  setTimeout(() => {
+    console.log('지연된 자동 로그인 시도');
+    tryInject();
+  }, 1000);
 })();
 
 // ===== 빠른 LMS 자동 로그인 주입 =====
 (function fastLmsAutoLogin() {
   let creds = null;
   ipcRenderer.on('lms-credentials', (_e, payload) => {
+    console.log('LMS preload에서 자격 증명 수신:', payload);
     creds = payload || null;
+    if (creds) {
+      console.log('LMS 자격 증명 수신 완료:', {
+        hasAccount: !!creds.account,
+        hasPassword: !!creds.password,
+        accountLength: creds.account ? creds.account.length : 0,
+        passwordLength: creds.password ? creds.password.length : 0
+      });
+    } else {
+      console.log('LMS 자격 증명이 null 또는 undefined입니다');
+    }
     tryInject();
   });
 
   function isLmsLogin() {
     try {
       const href = location.href;
-      return /kulms\.korea\.ac\.kr\//.test(href) || /\/Login\.do$/.test(href) || document.getElementById('one_id');
-    } catch { return false; }
+      console.log('LMS 현재 URL 확인:', href);
+      
+      // 다양한 LMS 로그인 페이지 패턴 확인 (확장된 패턴)
+      const isLoginPage = /mylms\.korea\.ac\.kr\//.test(href) || 
+                         /lms\.korea\.ac\.kr\//.test(href) ||
+                         /sso\.korea\.ac\.kr\//.test(href) ||
+                         /\/Login\.do$/.test(href) ||
+                         /\/login\.php/.test(href) ||
+                         /kulms\.korea\.ac\.kr\//.test(href);
+      
+      // DOM 요소로도 확인 (확장된 선택자)
+      const hasLoginForm = document.getElementById('one_id') || 
+                          document.getElementById('loginFrm') ||
+                          document.querySelector('input[name="one_id"]') ||
+                          document.querySelector('input[name="user_id"]') ||
+                          document.querySelector('input[placeholder*="KUPID"]') ||
+                          document.querySelector('input[placeholder*="Single ID"]') ||
+                          document.querySelector('input[placeholder*="아이디"]') ||
+                          document.querySelector('input[type="password"]');
+      
+      console.log('LMS 로그인 페이지 여부:', isLoginPage);
+      console.log('LMS 로그인 폼 요소 존재:', !!hasLoginForm);
+      
+      return isLoginPage || !!hasLoginForm;
+    } catch (error) {
+      console.error('LMS URL 확인 오류:', error);
+      return false;
+    }
   }
 
   function fillAndSubmit() {
     try {
-      if (!creds || !creds.account || !creds.password) return false;
-      var idEl = document.getElementById('one_id');
-      var pwEl = document.getElementById('password');
+      if (!creds || !creds.account || !creds.password) {
+        console.log('LMS 자격 증명이 없음:', { 
+          creds: creds, 
+          hasAccount: creds ? !!creds.account : false, 
+          hasPassword: creds ? !!creds.password : false 
+        });
+        return false;
+      }
+      
+      console.log('LMS 자동 로그인 시도:', {
+        hasAccount: !!creds.account,
+        hasPassword: !!creds.password,
+        accountLength: creds.account ? creds.account.length : 0,
+        account: creds.account
+      });
+      
+      // LMS 로그인 폼 요소 찾기 (LMS 특화 - 더 정확한 선택자)
+      var idEl = document.getElementById('one_id') || 
+                 document.querySelector('input[name="one_id"]') ||
+                 document.querySelector('input[name="user_id"]') ||
+                 document.querySelector('input[placeholder*="KUPID"]') ||
+                 document.querySelector('input[placeholder*="Single ID"]') ||
+                 document.querySelector('input[type="text"]');
+      
+      var pwEl = document.getElementById('password') ||
+                 document.querySelector('input[name="user_password"]') ||
+                 document.querySelector('input[name="password"]') ||
+                 document.querySelector('input[placeholder*="Password"]') ||
+                 document.querySelector('input[type="password"]');
+      
+      console.log('LMS 로그인 필드 찾기:', {
+        idEl: !!idEl,
+        pwEl: !!pwEl,
+        idElId: idEl ? idEl.id : null,
+        pwElId: pwEl ? pwEl.id : null
+      });
+      
       if (!idEl || !pwEl) return false;
+      
+      // 기존 값 지우기
+      idEl.value = '';
+      pwEl.value = '';
+      
+      // 로그인 정보 입력
+      console.log('LMS 로그인 정보 입력:', { 
+        account: creds.account, 
+        passwordLength: creds.password ? creds.password.length : 0 
+      });
       idEl.value = creds.account;
       pwEl.value = creds.password;
-      var btn = document.querySelector('button.userTypeCheck') || document.querySelector('.userTypeCheck');
-      if (btn) { btn.click(); return true; }
-      var form = document.getElementById('loginFrm') || document.querySelector('form[action*="/Login.do"]');
-      if (form) { form.submit(); return true; }
+      
+      console.log('LMS 로그인 정보 입력 완료');
+      
+      // 입력 이벤트 발생 (LMS 특화 - 더 강력한 이벤트)
+      idEl.dispatchEvent(new Event('input', { bubbles: true }));
+      pwEl.dispatchEvent(new Event('input', { bubbles: true }));
+      idEl.dispatchEvent(new Event('change', { bubbles: true }));
+      pwEl.dispatchEvent(new Event('change', { bubbles: true }));
+      idEl.dispatchEvent(new Event('blur', { bubbles: true }));
+      pwEl.dispatchEvent(new Event('blur', { bubbles: true }));
+      
+      // 포커스 이벤트도 발생
+      idEl.focus();
+      pwEl.focus();
+      
+      // 로그인 버튼 찾기 (LMS 특화 - 더 정확한 버튼 선택자)
+      var btn = document.querySelector('button[type="button"].userTypeCheck') ||
+                document.querySelector('button[onclick*="userTypeCheck"]') ||
+                document.querySelector('input[type="submit"]') || 
+                document.querySelector('button[type="submit"]') ||
+                document.querySelector('input[value="Login"]') ||
+                document.querySelector('input[value="로그인"]') ||
+                document.querySelector('.ibtn') ||
+                document.querySelector('button[onclick*="login"]');
+      
+      if (btn) { 
+        console.log('LMS 로그인 버튼 클릭 시도');
+        btn.click(); 
+        return true; 
+      }
+      
+      // 폼 제출 시도 (LMS 특화)
+      var form = document.getElementById('loginFrm') ||
+                 document.querySelector('form[name="loginFrm"]') ||
+                 document.querySelector('form[action*="Login.do"]') ||
+                 document.querySelector('form[method="post"]') ||
+                 document.querySelector('form');
+      
+      if (form) { 
+        console.log('LMS 폼 제출 시도');
+        form.submit(); 
+        return true; 
+      }
+      
+      // Enter 키 시뮬레이션 (LMS 특화 - 더 강력한 이벤트)
+      console.log('LMS Enter 키 시뮬레이션');
+      pwEl.dispatchEvent(new KeyboardEvent('keydown', { key: 'Enter', code: 'Enter', keyCode: 13, which: 13, bubbles: true }));
+      pwEl.dispatchEvent(new KeyboardEvent('keypress', { key: 'Enter', code: 'Enter', keyCode: 13, which: 13, bubbles: true }));
+      pwEl.dispatchEvent(new KeyboardEvent('keyup', { key: 'Enter', code: 'Enter', keyCode: 13, which: 13, bubbles: true }));
+      return true;
+    } catch (error) {
+      console.error('LMS 자동 로그인 오류:', error);
       return false;
-    } catch { return false; }
+    }
   }
 
   function tryInject() {
-    if (!isLmsLogin()) return;
-    if (fillAndSubmit()) return;
-    const obs = new MutationObserver((_m, o) => { if (fillAndSubmit()) { o.disconnect(); } });
+    console.log('LMS 자동 로그인 시도 시작');
+    
+    // 자격 증명이 없으면 시도하지 않음
+    if (!creds || !creds.account || !creds.password) {
+      console.log('LMS 자격 증명이 없어서 자동 로그인 중단');
+      console.log('LMS 계정:', creds ? creds.account : null);
+      console.log('LMS 비밀번호:', creds ? (creds.password ? '[HIDDEN]' : null) : null);
+      console.log('LMS creds 객체:', creds);
+      console.log('LMS creds.account 존재:', creds ? !!creds.account : false);
+      console.log('LMS creds.password 존재:', creds ? !!creds.password : false);
+      return;
+    }
+    
+    if (!isLmsLogin()) {
+      console.log('LMS 로그인 페이지가 아님');
+      return;
+    }
+    
+    console.log('LMS 로그인 페이지 감지됨, 자동 로그인 시도');
+    if (fillAndSubmit()) {
+      console.log('LMS 자동 로그인 성공');
+      return;
+    }
+    
+    console.log('LMS 첫 번째 시도 실패, DOM 변화 감지 시작');
+    const obs = new MutationObserver((_m, o) => { 
+      if (fillAndSubmit()) { 
+        console.log('LMS DOM 변화 감지로 자동 로그인 성공');
+        o.disconnect(); 
+      } 
+    });
     obs.observe(document.documentElement, { childList: true, subtree: true });
+    
     let tries = 0;
-    const t = setInterval(() => { tries++; if (fillAndSubmit() || tries > 20) clearInterval(t); }, 25);
+    const t = setInterval(() => { 
+      tries++; 
+      console.log(`LMS 자동 로그인 재시도 ${tries}/20`);
+      if (fillAndSubmit() || tries > 20) {
+        console.log(tries > 20 ? 'LMS 최대 재시도 횟수 초과' : 'LMS 자동 로그인 성공');
+        clearInterval(t);
+        obs.disconnect();
+      }
+    }, 25);
   }
 
   document.addEventListener('readystatechange', () => { tryInject(); }, true);
   document.addEventListener('DOMContentLoaded', () => { tryInject(); }, true);
+  
+  // 추가적인 이벤트 리스너
+  window.addEventListener('load', () => { 
+    console.log('LMS 윈도우 로드 완료, 자동 로그인 재시도');
+    setTimeout(tryInject, 100); 
+  });
+  
+  // 페이지가 완전히 로드된 후에도 시도
+  setTimeout(() => {
+    console.log('LMS 지연된 자동 로그인 시도');
+    tryInject();
+  }, 1000);
 })();
 
 

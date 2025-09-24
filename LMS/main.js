@@ -21,6 +21,191 @@ function markFirstRunComplete() {
   store.set('hasRunBefore', true);
 }
 
+// 로그인 설정 확인 및 페이지 로드 함수
+async function checkLoginConfigAndLoadPage() {
+  try {
+    const credentials = store.get('credentials', {});
+    
+    // 로그인 설정이 완전한지 확인
+    const hasValidConfig = credentials && 
+                          credentials.username && 
+                          credentials.username.trim() !== '' && 
+                          credentials.password && 
+                          credentials.password.trim() !== '' &&
+                          credentials.remember;
+    
+    if (hasValidConfig) {
+      console.log('유효한 로그인 설정이 있습니다. LMS 메인 페이지로 이동합니다.');
+      // LMS 메인 페이지로 이동
+      mainWindow.loadURL('https://mylms.korea.ac.kr/');
+      
+      // 웹뷰 로드 완료 시 자동 로그인 시도
+      mainWindow.webContents.once('did-finish-load', () => {
+        setTimeout(() => {
+          performLMSAutoLogin(credentials);
+        }, 2000);
+      });
+    } else {
+      console.log('로그인 설정이 없습니다. 로그인 설정 페이지로 이동합니다.');
+      mainWindow.loadFile('login.html');
+    }
+  } catch (error) {
+    console.error('로그인 설정 확인 중 오류:', error);
+    // 오류 발생 시 로그인 설정 페이지로 이동
+    mainWindow.loadFile('login.html');
+  }
+}
+
+// LMS 자동 로그인 실행 함수
+async function performLMSAutoLogin(credentials) {
+  try {
+    console.log('LMS 자동 로그인 시도 중...', credentials.username);
+    
+    // 웹뷰에 스크립트 주입 후 실행
+    const result = await mainWindow.webContents.executeJavaScript(`
+      (async () => {
+        try {
+          console.log('LMS 자동 로그인 스크립트 실행 중...');
+          console.log('현재 페이지 URL:', window.location.href);
+          console.log('현재 페이지 제목:', document.title);
+          
+          // 페이지가 완전히 로드될 때까지 대기
+          if (document.readyState !== 'complete') {
+            console.log('페이지 로딩 대기 중...');
+            await new Promise(resolve => {
+              window.addEventListener('load', resolve, { once: true });
+            });
+          }
+          
+          // 잠시 대기
+          await new Promise(resolve => setTimeout(resolve, 500));
+          
+          // 모든 입력 필드 찾기
+          const allInputs = document.querySelectorAll('input');
+          console.log('모든 입력 필드:', allInputs.length);
+          
+          // 각 입력 필드 정보 출력
+          allInputs.forEach((input, index) => {
+            console.log(\`입력 필드 \${index + 1}:\`, {
+              type: input.type,
+              name: input.name,
+              id: input.id,
+              placeholder: input.placeholder,
+              value: input.value
+            });
+          });
+          
+          // 로그인 폼 요소 찾기 (LMS 특화)
+          let idInput = null;
+          let pwInput = null;
+          let loginForm = null;
+          
+          // ID 입력 필드 찾기 (LMS 특화)
+          idInput = document.getElementById('one_id') || 
+                   document.querySelector('input[name="one_id"]') ||
+                   document.querySelector('input[name="user_id"]') ||
+                   document.querySelector('input[placeholder*="KUPID"]') ||
+                   document.querySelector('input[placeholder*="Single ID"]') ||
+                   document.querySelector('input[type="text"]');
+          
+          // 비밀번호 입력 필드 찾기 (LMS 특화)
+          pwInput = document.getElementById('password') ||
+                   document.querySelector('input[name="user_password"]') ||
+                   document.querySelector('input[name="password"]') ||
+                   document.querySelector('input[placeholder*="Password"]') ||
+                   document.querySelector('input[type="password"]');
+          
+          // 로그인 폼 찾기 (LMS 특화)
+          loginForm = document.getElementById('loginFrm') ||
+                     document.querySelector('form[name="loginFrm"]') ||
+                     document.querySelector('form[action*="Login.do"]') ||
+                     document.querySelector('form[method="post"]') ||
+                     document.querySelector('form');
+          
+          console.log('찾은 요소들:', {
+            idInput: !!idInput,
+            pwInput: !!pwInput,
+            loginForm: !!loginForm
+          });
+          
+          if (idInput && pwInput) {
+            console.log('로그인 정보 입력 중...');
+            
+            // 기존 값 지우기
+            idInput.value = '';
+            pwInput.value = '';
+            
+            // 로그인 정보 입력
+            idInput.value = '${credentials.username}';
+            pwInput.value = '${credentials.password}';
+            
+            // 입력 이벤트 발생 (더 강력하게)
+            idInput.dispatchEvent(new Event('input', { bubbles: true }));
+            pwInput.dispatchEvent(new Event('input', { bubbles: true }));
+            idInput.dispatchEvent(new Event('change', { bubbles: true }));
+            pwInput.dispatchEvent(new Event('change', { bubbles: true }));
+            idInput.dispatchEvent(new Event('blur', { bubbles: true }));
+            pwInput.dispatchEvent(new Event('blur', { bubbles: true }));
+            
+            // 포커스 이벤트도 발생
+            idInput.focus();
+            pwInput.focus();
+            
+            console.log('로그인 정보 입력 완료');
+            
+            // 잠시 대기 후 로그인 시도
+            setTimeout(() => {
+              // 로그인 버튼 찾기 (LMS 특화)
+              const loginBtn = document.querySelector('button[type="button"].userTypeCheck') ||
+                              document.querySelector('button[onclick*="userTypeCheck"]') ||
+                              document.querySelector('input[type="submit"]') || 
+                              document.querySelector('button[type="submit"]') ||
+                              document.querySelector('input[value="Login"]') ||
+                              document.querySelector('input[value="로그인"]') ||
+                              document.querySelector('.ibtn') ||
+                              document.querySelector('button[onclick*="login"]');
+              
+              if (loginBtn) {
+                console.log('로그인 버튼 클릭 시도...');
+                loginBtn.click();
+              } else if (loginForm && loginForm.submit) {
+                console.log('폼 제출 시도...');
+                loginForm.submit();
+              } else {
+                console.log('Enter 키 시뮬레이션...');
+                pwInput.dispatchEvent(new KeyboardEvent('keydown', { key: 'Enter', code: 'Enter', keyCode: 13, which: 13, bubbles: true }));
+                pwInput.dispatchEvent(new KeyboardEvent('keypress', { key: 'Enter', code: 'Enter', keyCode: 13, which: 13, bubbles: true }));
+                pwInput.dispatchEvent(new KeyboardEvent('keyup', { key: 'Enter', code: 'Enter', keyCode: 13, which: 13, bubbles: true }));
+              }
+            }, 1500);
+            
+            return { success: true, message: 'LMS 자동 로그인 시도 완료' };
+          } else {
+            return { 
+              success: false, 
+              message: 'LMS 로그인 필드를 찾을 수 없습니다. idInput: ' + !!idInput + ', pwInput: ' + !!pwInput 
+            };
+          }
+        } catch (error) {
+          console.error('LMS 자동 로그인 스크립트 오류:', error);
+          return { success: false, message: error.message };
+        }
+      })();
+    `);
+    
+    if (result.success) {
+      console.log('LMS 자동 로그인 성공:', result.message);
+    } else {
+      console.error('LMS 자동 로그인 실패:', result.message);
+    }
+    
+    return result;
+  } catch (error) {
+    console.error('LMS 자동 로그인 오류:', error);
+    return { success: false, message: error.message };
+  }
+}
+
 // images 디렉토리 생성
 function ensureImagesDirectory() {
   const imagesDir = path.join(__dirname, 'images');
@@ -56,8 +241,8 @@ function createWindow() {
     show: false
   });
 
-  // 항상 로그인 페이지 로드 (자동로그인 제거)
-  mainWindow.loadFile('login.html');
+  // 로그인 설정 확인 후 적절한 페이지 로드
+  checkLoginConfigAndLoadPage();
   if (isFirstRun()) {
     markFirstRunComplete();
   }
@@ -418,6 +603,13 @@ ipcMain.handle('clear-credentials', async () => {
 ipcMain.handle('navigate-to-lms', async (event, credentials) => {
   try {
     mainWindow.loadURL('https://mylms.korea.ac.kr/');
+    
+    // 웹뷰 로드 완료 시 자동 로그인 시도
+    mainWindow.webContents.once('did-finish-load', () => {
+      setTimeout(() => {
+        performLMSAutoLogin(credentials);
+      }, 2000);
+    });
     
     return { success: true };
   } catch (error) {

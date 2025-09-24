@@ -29,6 +29,36 @@ body {
   transition: background-color 0.3s ease, color 0.3s ease;
 }
 
+/* Pretendard 폰트 강제 적용 */
+* {
+  font-family: 'Pretendard', -apple-system, BlinkMacSystemFont, 'Segoe UI', Roboto, 'Apple SD Gothic Neo', Inter, system-ui, sans-serif !important;
+}
+
+/* 모든 텍스트 요소에 강제 적용 */
+html, body, div, span, h1, h2, h3, h4, h5, h6, p, a, button, input, textarea, select, label, li, ul, ol, table, th, td, tr, thead, tbody, form, fieldset, legend {
+  font-family: 'Pretendard', -apple-system, BlinkMacSystemFont, 'Segoe UI', Roboto, 'Apple SD Gothic Neo', Inter, system-ui, sans-serif !important;
+}
+
+/* 모달 내 모든 요소 강제 적용 */
+.setup-modal, .setup-modal *, .setup-card, .setup-card * {
+  font-family: 'Pretendard', -apple-system, BlinkMacSystemFont, 'Segoe UI', Roboto, 'Apple SD Gothic Neo', Inter, system-ui, sans-serif !important;
+}
+
+/* 버튼과 입력 필드 강제 적용 */
+.btn, .btn *, input, input *, textarea, textarea *, select, select *, label, label * {
+  font-family: 'Pretendard', -apple-system, BlinkMacSystemFont, 'Segoe UI', Roboto, 'Apple SD Gothic Neo', Inter, system-ui, sans-serif !important;
+}
+
+/* 헤더와 카드 요소 강제 적용 */
+.header, .header *, .card, .card *, .brand, .brand *, .titles, .titles * {
+  font-family: 'Pretendard', -apple-system, BlinkMacSystemFont, 'Segoe UI', Roboto, 'Apple SD Gothic Neo', Inter, system-ui, sans-serif !important;
+}
+
+/* 테마 토글 버튼 강제 적용 */
+.theme-toggle, .theme-toggle *, .theme-icon {
+  font-family: 'Pretendard', -apple-system, BlinkMacSystemFont, 'Segoe UI', Roboto, 'Apple SD Gothic Neo', Inter, system-ui, sans-serif !important;
+}
+
 /* 부팅화면 로딩 애니메이션 */
 .boot-loader {
   position: fixed;
