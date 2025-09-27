@@ -1,6 +1,8 @@
 const { app, BrowserWindow, nativeTheme, ipcMain } = require('electron');
 const path = require('path');
 const keytar = require('keytar');
+// 세션 상단바(빨간 줄) 사용 여부
+const ENABLE_SESSION_BAR = false;
 
 // IPC 핸들러들을 앱 준비 후에 등록
 app.on('ready', () => {
@@ -8,9 +10,13 @@ ipcMain.handle('launcher-open-portal', (event, { account, password } = {}) => {
   const child = new BrowserWindow({
     width: 1200,
     height: 800,
+    title: '',
+    // 기본 시스템 타이틀바 표시
+    titleBarStyle: 'default',
     backgroundColor: nativeTheme.shouldUseDarkColors ? '#0f1115' : '#ffffff',
     webPreferences: {
-      preload: path.join(__dirname, 'preload.js')
+      preload: path.join(__dirname, 'preload.js'),
+      disableDialogs: true
     }
   });
   // 로그인 페이지를 직접 열어 자동 로그인 안정화 (Intro는 세션 모달로 막히는 경우가 있어 Login.kpd로 진입)
@@ -78,86 +84,88 @@ ipcMain.handle('launcher-open-portal', (event, { account, password } = {}) => {
           html, body, * { font-family: 'Pretendard', -apple-system, BlinkMacSystemFont, 'Segoe UI', Roboto, 'Apple SD Gothic Neo', Inter, system-ui, sans-serif !important; }
         `);
       } catch (_) {}
-      // 상단 커스텀 헤더와 세션 타이머 주입
+      // 세션 만료 알림만 주입 (헤더 없이)
       try {
-        // 이전 버전 헤더가 있으면 제거하고 플래그 초기화
-        await child.webContents.executeJavaScript(`(function(){
-          try {
-            var old=document.getElementById('ku-helper-bar'); if(old) old.remove();
-            var fabs=document.getElementsByClassName('ku-fab'); if(fabs&&fabs[0]) fabs[0].remove();
-            window.__kuSessionBarInjected = false;
-            document.body && (document.body.style.marginTop='');
-          } catch(_){}
-        })();`);
-      // 이전 버전 헤더 제거 후 재주입
-      
-      // 같은 try 블록 내에서 연속 수행
-      // 제거 → 스타일 주입 → 헤더 생성 순으로 처리
-      
-      // 제거 2차 확인
-      await child.webContents.executeJavaScript(`(function(){
-          try {
-            var old=document.getElementById('ku-helper-bar'); if(old) old.remove();
-            var fabs=document.getElementsByClassName('ku-fab'); if(fabs&&fabs[0]) fabs[0].remove();
-            window.__kuSessionBarInjected = false;
-            document.body && (document.body.style.marginTop='');
-          } catch(_){}
-        })();`);
         await child.webContents.insertCSS(`
-          :root { --ku-helper-height: 40px; }
-          #ku-helper-bar { position: fixed; top: 0; left: 0; right: 0; height: var(--ku-helper-height); background: linear-gradient(90deg, #b40017 0%, #e31b23 100%); color: #fff; display: grid; grid-template-columns: 220px 1fr 220px; align-items: center; padding: 0 12px; z-index: 999999; -webkit-app-region: drag; box-shadow: rgba(0,0,0,0.25) 0 2px 10px; }
-          #ku-helper-bar .ku-btn { -webkit-app-region: no-drag; cursor: pointer; background: rgba(255,255,255,0.15); color: #fff; border: 1px solid rgba(255,255,255,0.25); border-radius: 8px; padding: 5px 9px; font-size: 12px; font-weight: 700; }
-          #ku-helper-bar .ku-btn:hover { background: rgba(255,255,255,0.22); }
-          #ku-helper-bar .left { display: flex; align-items: center; gap: 8px; }
-          #ku-helper-bar .center { display: flex; align-items: center; justify-content: center; gap: 10px; }
-          #ku-helper-bar .right { display: flex; gap: 8px; align-items: center; -webkit-app-region: no-drag; justify-content: flex-end; }
-          #ku-progress { width: 360px; height: 8px; background: rgba(255,255,255,0.25); border-radius: 999px; overflow: hidden; }
-          #ku-progress > div { height: 100%; width: 100%; background: #fff; transform-origin: left; transform: scaleX(1); }
-          #ku-time-label { font-size: 12px; font-weight: 800; letter-spacing: 0.2px; }
-          body { margin-top: var(--ku-helper-height) !important; }
-          .ku-toast { position: fixed; top: calc(var(--ku-helper-height) + 12px); right: 12px; background: #111; color: #fff; padding: 10px 12px; border-radius: 10px; z-index: 999999; box-shadow: rgba(0,0,0,0.2) 0 6px 16px; font-size: 13px; opacity: 0.98; }
-          .ku-fab { position: fixed; top: 6px; left: 84px; background: #e31b23; color: #fff; padding: 6px 12px; border-radius: 999px; z-index: 1000000; display: none; -webkit-app-region: no-drag; font-size: 12px; font-weight: 700; box-shadow: rgba(0,0,0,0.18) 0 6px 14px; }
-        `);
-        await child.webContents.executeJavaScript(`(function(){
-          if (window.__kuSessionBarInjected) return; window.__kuSessionBarInjected = true;
-          const bar = document.createElement('div');
-          bar.id = 'ku-helper-bar';
-          const left = document.createElement('div'); left.className='left';
-          const backBtn = document.createElement('button');
-          backBtn.className = 'ku-btn';
-          backBtn.textContent = '← 런처로';
-          backBtn.addEventListener('click', function(){ try { window.close(); } catch(_){} });
-          left.appendChild(backBtn);
-          const center = document.createElement('div'); center.className='center';
-          const time = document.createElement('span'); time.id = 'ku-time-label'; time.textContent='세션: 60:00';
-          const prog = document.createElement('div'); prog.id='ku-progress'; const fill=document.createElement('div'); prog.appendChild(fill);
-          center.appendChild(time); center.appendChild(prog);
-          const right = document.createElement('div'); right.className = 'right';
-          const collapse = document.createElement('button'); collapse.className='ku-btn'; collapse.textContent='접기';
-          right.appendChild(collapse);
-          bar.appendChild(left); bar.appendChild(center); bar.appendChild(right);
-          document.documentElement.appendChild(bar);
-          const fab = document.createElement('button'); fab.className='ku-fab'; fab.textContent='헤더 열기'; document.documentElement.appendChild(fab);
-
-          function toast(msg){ const t=document.createElement('div'); t.className='ku-toast'; t.textContent=msg; document.documentElement.appendChild(t); setTimeout(()=>{ t.remove(); }, 5000); }
-
-          const totalMs = 60*60*1000; // 1 hour
-          const start = Date.now();
-          let alerted10=false, alerted5=false;
-          function fmt(ms){ const s=Math.max(0, Math.floor(ms/1000)); const mm=String(Math.floor(s/60)).padStart(2,'0'); const ss=String(s%60).padStart(2,'0'); return mm+':'+ss; }
-          function tick(){
-            const elapsed = Date.now()-start; const remain = Math.max(0, totalMs-elapsed); time.textContent = '세션: '+fmt(remain); fill.style.transform = 'scaleX('+(remain/totalMs)+')';
-            const remainMin = Math.ceil(remain/60000);
-            if (!alerted10 && remainMin<=10 && remain>0){ alerted10=true; toast('세션이 10분 후 만료됩니다. 진행 중인 작업을 저장하세요.'); }
-            if (!alerted5 && remainMin<=5 && remain>0){ alerted5=true; toast('세션이 5분 후 만료됩니다.'); }
-            if (remain>0) { window.__kuSessionTimer = setTimeout(tick, 1000); } else { toast('세션이 만료되었습니다. 재로그인이 필요할 수 있어요.'); }
+          .ku-session-toast { 
+            position: fixed; 
+            top: 20px; 
+            right: 20px; 
+            background: #e31b23; 
+            color: #fff; 
+            padding: 15px 20px; 
+            border-radius: 10px; 
+            z-index: 999999; 
+            box-shadow: rgba(0,0,0,0.3) 0 8px 20px; 
+            font-size: 14px; 
+            font-weight: 600;
+            max-width: 300px;
+            opacity: 0;
+            transform: translateX(100%);
+            transition: all 0.3s ease;
           }
-          tick();
+          .ku-session-toast.show {
+            opacity: 1;
+            transform: translateX(0);
+          }
+          .ku-session-toast.warning {
+            background: #ffc107;
+            color: #000;
+          }
+          .ku-session-toast.error {
+            background: #dc3545;
+          }
+        `);
+        
+        await child.webContents.executeJavaScript(`(function(){
+          if (window.__kuSessionNotificationInjected) return; 
+          window.__kuSessionNotificationInjected = true;
+          
+          function showToast(msg, type = 'warning') {
+            const toast = document.createElement('div');
+            toast.className = 'ku-session-toast ' + type;
+            toast.textContent = msg;
+            document.documentElement.appendChild(toast);
+            
+            // 애니메이션으로 표시
+            setTimeout(() => toast.classList.add('show'), 100);
+            
+            // 5초 후 제거
+            setTimeout(() => {
+              toast.classList.remove('show');
+              setTimeout(() => toast.remove(), 300);
+            }, 5000);
+          }
 
-          function collapseBar(){ document.body.style.marginTop='0px'; bar.style.display='none'; fab.style.display='inline-flex'; }
-          function expandBar(){ document.body.style.marginTop='var(--ku-helper-height)'; bar.style.display='flex'; fab.style.display='none'; }
-          collapse.addEventListener('click', collapseBar);
-          fab.addEventListener('click', expandBar);
+          const totalMs = 60*60*1000; // 1시간
+          const start = Date.now();
+          let alerted10 = false, alerted5 = false, alerted1 = false;
+          
+          function tick() {
+            const elapsed = Date.now() - start;
+            const remain = Math.max(0, totalMs - elapsed);
+            const remainMin = Math.ceil(remain / 60000);
+            
+            if (!alerted10 && remainMin <= 10 && remain > 0) {
+              alerted10 = true;
+              showToast('세션이 10분 후 만료됩니다. 진행 중인 작업을 저장하세요.', 'warning');
+            }
+            if (!alerted5 && remainMin <= 5 && remain > 0) {
+              alerted5 = true;
+              showToast('세션이 5분 후 만료됩니다. 작업을 완료하세요.', 'warning');
+            }
+            if (!alerted1 && remainMin <= 1 && remain > 0) {
+              alerted1 = true;
+              showToast('세션이 1분 후 만료됩니다!', 'error');
+            }
+            if (remain > 0) {
+              window.__kuSessionTimer = setTimeout(tick, 1000);
+            } else {
+              showToast('세션이 만료되었습니다. 재로그인이 필요할 수 있습니다.', 'error');
+            }
+          }
+          
+          tick();
         })();`);
       } catch (_) {}
     }
@@ -223,9 +231,13 @@ ipcMain.handle('launcher-open-lms', (event, { account, password } = {}) => {
   const child = new BrowserWindow({
     width: 1200,
     height: 800,
+    title: '',
+    // 기본 시스템 타이틀바 표시
+    titleBarStyle: 'default',
     backgroundColor: nativeTheme.shouldUseDarkColors ? '#0f1115' : '#ffffff',
     webPreferences: {
-      preload: path.join(__dirname, 'preload.js')
+      preload: path.join(__dirname, 'preload.js'),
+      disableDialogs: true
     }
   });
   
@@ -271,56 +283,88 @@ ipcMain.handle('launcher-open-lms', (event, { account, password } = {}) => {
           html, body, * { font-family: 'Pretendard', -apple-system, BlinkMacSystemFont, 'Segoe UI', Roboto, 'Apple SD Gothic Neo', Inter, system-ui, sans-serif !important; }
         `);
       } catch (_) {}
-      // 상단 커스텀 헤더와 세션 타이머 주입
+      // 세션 만료 알림만 주입 (헤더 없이)
       try {
         await child.webContents.insertCSS(`
-          :root { --ku-helper-height: 48px; }
-          #ku-helper-bar { position: fixed; top: 0; left: 0; right: 0; height: var(--ku-helper-height); background: rgba(20, 20, 20, 0.85); color: #fff; display: flex; align-items: center; justify-content: space-between; padding: 0 16px 0 84px; z-index: 999999; -webkit-app-region: drag; backdrop-filter: saturate(180%) blur(12px); }
-          #ku-helper-bar .ku-btn { -webkit-app-region: no-drag; cursor: pointer; background: #e31b23; color: #fff; border: none; border-radius: 8px; padding: 6px 10px; font-size: 13px; font-weight: 600; box-shadow: rgba(0,0,0,0.15) 0 2px 4px; }
-          #ku-helper-bar .ku-btn:hover { filter: brightness(1.05); }
-          #ku-helper-bar .right { display: flex; gap: 10px; align-items: center; -webkit-app-region: no-drag; }
-          body { margin-top: var(--ku-helper-height) !important; }
-          .ku-toast { position: fixed; top: calc(var(--ku-helper-height) + 12px); right: 12px; background: #111; color: #fff; padding: 10px 12px; border-radius: 10px; z-index: 999999; box-shadow: rgba(0,0,0,0.2) 0 6px 16px; font-size: 13px; opacity: 0.98; }
-          .ku-fab { position: fixed; top: 8px; left: 84px; background: #e31b23; color: #fff; padding: 6px 12px; border-radius: 999px; z-index: 1000000; display: none; -webkit-app-region: no-drag; font-size: 12px; font-weight: 700; box-shadow: rgba(0,0,0,0.18) 0 6px 14px; }
-        `);
-        await child.webContents.executeJavaScript(`(function(){
-          if (window.__kuSessionBarInjected) return; window.__kuSessionBarInjected = true;
-          const bar = document.createElement('div');
-          bar.id = 'ku-helper-bar';
-          const left = document.createElement('div');
-          const backBtn = document.createElement('button');
-          backBtn.className = 'ku-btn';
-          backBtn.textContent = '← 런처로';
-          backBtn.addEventListener('click', function(){ try { window.close(); } catch(_){} });
-          left.appendChild(backBtn);
-          const right = document.createElement('div'); right.className = 'right';
-          const label = document.createElement('span'); label.textContent = '세션 만료까지 남은 시간'; label.style.opacity='0.8'; label.style.fontSize='12px';
-          const time = document.createElement('span'); time.id = 'ku-session-remaining'; time.style.fontWeight='700';
-          const collapse = document.createElement('button'); collapse.className='ku-btn'; collapse.textContent='접기';
-          right.appendChild(label); right.appendChild(time); right.appendChild(collapse);
-          bar.appendChild(left); bar.appendChild(right);
-          document.documentElement.appendChild(bar);
-          const fab = document.createElement('button'); fab.className='ku-fab'; fab.textContent='헤더 열기'; document.documentElement.appendChild(fab);
-
-          function toast(msg){ const t=document.createElement('div'); t.className='ku-toast'; t.textContent=msg; document.documentElement.appendChild(t); setTimeout(()=>{ t.remove(); }, 5000); }
-
-          const totalMs = 60*60*1000; // 1 hour
-          const start = Date.now();
-          let alerted10=false, alerted5=false;
-          function fmt(ms){ const s=Math.max(0, Math.floor(ms/1000)); const hh=String(Math.floor(s/3600)).padStart(2,'0'); const mm=String(Math.floor((s%3600)/60)).padStart(2,'0'); const ss=String(s%60).padStart(2,'0'); return hh+':'+mm+':'+ss; }
-          function tick(){
-            const elapsed = Date.now()-start; const remain = Math.max(0, totalMs-elapsed); time.textContent = fmt(remain);
-            const remainMin = Math.ceil(remain/60000);
-            if (!alerted10 && remainMin<=10 && remain>0){ alerted10=true; toast('세션이 10분 후 만료됩니다. 진행 중인 작업을 저장하세요.'); }
-            if (!alerted5 && remainMin<=5 && remain>0){ alerted5=true; toast('세션이 5분 후 만료됩니다.'); }
-            if (remain>0) { window.__kuSessionTimer = setTimeout(tick, 1000); } else { toast('세션이 만료되었습니다. 재로그인이 필요할 수 있어요.'); }
+          .ku-session-toast { 
+            position: fixed; 
+            top: 20px; 
+            right: 20px; 
+            background: #e31b23; 
+            color: #fff; 
+            padding: 15px 20px; 
+            border-radius: 10px; 
+            z-index: 999999; 
+            box-shadow: rgba(0,0,0,0.3) 0 8px 20px; 
+            font-size: 14px; 
+            font-weight: 600;
+            max-width: 300px;
+            opacity: 0;
+            transform: translateX(100%);
+            transition: all 0.3s ease;
           }
-          tick();
+          .ku-session-toast.show {
+            opacity: 1;
+            transform: translateX(0);
+          }
+          .ku-session-toast.warning {
+            background: #ffc107;
+            color: #000;
+          }
+          .ku-session-toast.error {
+            background: #dc3545;
+          }
+        `);
+        
+        await child.webContents.executeJavaScript(`(function(){
+          if (window.__kuSessionNotificationInjected) return; 
+          window.__kuSessionNotificationInjected = true;
+          
+          function showToast(msg, type = 'warning') {
+            const toast = document.createElement('div');
+            toast.className = 'ku-session-toast ' + type;
+            toast.textContent = msg;
+            document.documentElement.appendChild(toast);
+            
+            // 애니메이션으로 표시
+            setTimeout(() => toast.classList.add('show'), 100);
+            
+            // 5초 후 제거
+            setTimeout(() => {
+              toast.classList.remove('show');
+              setTimeout(() => toast.remove(), 300);
+            }, 5000);
+          }
 
-          function collapseBar(){ document.body.style.marginTop='0px'; bar.style.display='none'; fab.style.display='inline-flex'; }
-          function expandBar(){ document.body.style.marginTop='var(--ku-helper-height)'; bar.style.display='flex'; fab.style.display='none'; }
-          collapse.addEventListener('click', collapseBar);
-          fab.addEventListener('click', expandBar);
+          const totalMs = 60*60*1000; // 1시간
+          const start = Date.now();
+          let alerted10 = false, alerted5 = false, alerted1 = false;
+          
+          function tick() {
+            const elapsed = Date.now() - start;
+            const remain = Math.max(0, totalMs - elapsed);
+            const remainMin = Math.ceil(remain / 60000);
+            
+            if (!alerted10 && remainMin <= 10 && remain > 0) {
+              alerted10 = true;
+              showToast('세션이 10분 후 만료됩니다. 진행 중인 작업을 저장하세요.', 'warning');
+            }
+            if (!alerted5 && remainMin <= 5 && remain > 0) {
+              alerted5 = true;
+              showToast('세션이 5분 후 만료됩니다. 작업을 완료하세요.', 'warning');
+            }
+            if (!alerted1 && remainMin <= 1 && remain > 0) {
+              alerted1 = true;
+              showToast('세션이 1분 후 만료됩니다!', 'error');
+            }
+            if (remain > 0) {
+              window.__kuSessionTimer = setTimeout(tick, 1000);
+            } else {
+              showToast('세션이 만료되었습니다. 재로그인이 필요할 수 있습니다.', 'error');
+            }
+          }
+          
+          tick();
         })();`);
       } catch (_) {}
     }
@@ -441,6 +485,8 @@ function createWindow() {
     height: 620,
     resizable: false,
     fullscreenable: false,
+    title: '',
+    titleBarStyle: 'hiddenInset',
     backgroundColor: nativeTheme.shouldUseDarkColors ? '#0f1115' : '#ffffff',
     webPreferences: {
       preload: path.join(__dirname, 'preload.js'),
