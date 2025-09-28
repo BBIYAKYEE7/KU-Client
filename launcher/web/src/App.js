@@ -1,6 +1,6 @@
 import React from 'react';
 import './App.css';
-import { Analytics } from '@vercel/analytics/react';
+//import { Analytics } from '@vercel/analytics/react';
 
 const RELEASE_URL = 'https://github.com/BBIYAKYEE7/Korea-University-Launcher/releases/latest';
 
@@ -318,7 +318,7 @@ function App() {
           </div>
         </div>
       )}
-      <Analytics/>
+      {/* <Analytics/> */}
     </div>
   );
 }
