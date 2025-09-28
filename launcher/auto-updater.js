@@ -129,7 +129,7 @@ class AutoUpdater {
     const options = {
       type: 'info',
       title: '새로운 버전이 있습니다!',
-      message: `Korea University Launcher v${updateInfo.version}이(가) 출시되었습니다.`,
+      message: `KU Client v${updateInfo.version}이(가) 출시되었습니다.`,
       detail: `현재 버전: v${this.currentVersion}\n최신 버전: v${updateInfo.version}\n\n${updateInfo.releaseNotes || '새로운 기능과 개선사항이 포함되었습니다.'}`,
       buttons: ['업데이트 (아키텍처 선택)', '수동 다운로드', '나중에', '업데이트 확인 안함'],
       defaultId: 0,

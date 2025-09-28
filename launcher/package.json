@@ -1,7 +1,7 @@
 {
-  "name": "korea-university-launcher",
+  "name": "ku-client",
   "version": "0.1.0",
-  "description": "Korea University Unified Launcher (LMS & Portal)",
+  "description": "KU Client - Korea University Unified Launcher (LMS & Portal)",
   "main": "main.js",
   "scripts": {
     "start": "electron .",
@@ -20,7 +20,7 @@
     "build:all": "npm run build:win && npm run build:mac && npm run build:linux"
   },
   "keywords": [],
-  "author": "KOREA ONE",
+  "author": "BBIYAKYEE7(김재윤)",
   "license": "MIT",
   "type": "commonjs",
   "devDependencies": {
@@ -32,8 +32,8 @@
   },
   "build": {
     "appId": "com.koreauniversity.launcher",
-    "productName": "Korea University Launcher",
-    "artifactName": "Korea-University-Launcher-${os}-${arch}.${ext}",
+    "productName": "KU Client",
+    "artifactName": "KU-Client-${os}-${arch}.${ext}",
     "directories": {
       "output": "dist"
     },
@@ -48,7 +48,7 @@
     ],
     "mac": {
       "category": "public.app-category.education",
-      "icon": "image/logo(w).png",
+      "icon": "image/logo.png",
       "target": [
         {
           "target": "dmg",
@@ -57,7 +57,7 @@
       ]
     },
     "win": {
-      "icon": "image/logo(w).png",
+      "icon": "image/logo.png",
       "target": [
         {
           "target": "nsis",
@@ -66,7 +66,7 @@
       ]
     },
     "linux": {
-      "icon": "image/logo(w).png",
+      "icon": "image/logo.png",
       "maintainer": "BBIYAKYEE7(김재윤) <bbiyakyee7@gmail.com>",
       "target": [
         {
@@ -80,7 +80,7 @@
       "allowToChangeInstallationDirectory": true,
       "createDesktopShortcut": true,
       "createStartMenuShortcut": true,
-      "shortcutName": "Korea University Launcher",
+      "shortcutName": "KU Client",
       "installerLanguages": ["ko-KR"],
       "language": "1042"
     }

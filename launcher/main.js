@@ -469,7 +469,7 @@ ipcMain.handle('get-system-theme', () => {
 });
 
 // 자격 증명 저장/로드/삭제 (macOS Keychain 등 안전한 저장소 사용)
-const SERVICE_NAME = 'KoreaUniversityLauncher';
+const SERVICE_NAME = 'KUClient';
 
 ipcMain.handle('creds-save', async (event, { account, password }) => {
   if (!account || typeof password !== 'string') {

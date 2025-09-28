@@ -191,8 +191,8 @@ function App() {
       <main id="top" className="main" role="main">
         <section className="container hero" aria-labelledby="hero-title">
           <div>
-            <h1 id="hero-title">고려대학교 통합 런처</h1>
-            <p className="subtitle">KUPID, LMS, 수강신청을 하나의 앱에서</p>
+            <h1 id="hero-title">KU Client</h1>
+            <p className="subtitle">고려대학교 통합 런처 - KUPID, LMS, 수강신청을 하나의 앱에서</p>
             <p className="notice">⚠️ 이 프로젝트는 고려대학교의 공식 프로젝트가 아닙니다. 개인 개발자가 만든 비공식 앱입니다.</p>
             <div className="cta">
               <a className="btn btn-primary" href="#" onClick={handlePrimaryClick} aria-describedby="primary-desc">{primaryText}</a>
