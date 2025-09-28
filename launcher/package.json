@@ -4,16 +4,85 @@
   "description": "Korea University Unified Launcher (LMS & Portal)",
   "main": "main.js",
   "scripts": {
-    "start": "electron ."
+    "start": "electron .",
+    "build": "electron-builder",
+    "dist": "electron-builder --publish=never",
+    "build:win-x64": "electron-builder --win --x64",
+    "build:win-x86": "electron-builder --win --ia32",
+    "build:win-arm64": "electron-builder --win --arm64",
+    "build:mac-x64": "electron-builder --mac --x64",
+    "build:mac-arm64": "electron-builder --mac --arm64",
+    "build:linux-x64": "electron-builder --linux --x64",
+    "build:linux-arm64": "electron-builder --linux --arm64",
+    "build:win": "electron-builder --win --x64 --ia32 --arm64",
+    "build:mac": "electron-builder --mac --x64 --arm64",
+    "build:linux": "electron-builder --linux --x64 --arm64",
+    "build:all": "npm run build:win && npm run build:mac && npm run build:linux"
   },
   "keywords": [],
   "author": "KOREA ONE",
   "license": "MIT",
   "type": "commonjs",
   "devDependencies": {
-    "electron": "^38.1.2"
+    "electron": "^38.1.2",
+    "electron-builder": "^24.6.4"
   },
   "dependencies": {
     "keytar": "^7.9.0"
+  },
+  "build": {
+    "appId": "com.koreauniversity.launcher",
+    "productName": "Korea University Launcher",
+    "artifactName": "Korea-University-Launcher-${os}-${arch}.${ext}",
+    "directories": {
+      "output": "dist"
+    },
+    "files": [
+      "main.js",
+      "preload.js",
+      "auto-updater.js",
+      "config.js",
+      "renderer/**/*",
+      "image/**/*",
+      "node_modules/**/*"
+    ],
+    "mac": {
+      "category": "public.app-category.education",
+      "icon": "image/logo(w).png",
+      "target": [
+        {
+          "target": "dmg",
+          "arch": ["x64", "arm64"]
+        }
+      ]
+    },
+    "win": {
+      "icon": "image/logo(w).png",
+      "target": [
+        {
+          "target": "nsis",
+          "arch": ["x64", "ia32", "arm64"]
+        }
+      ]
+    },
+    "linux": {
+      "icon": "image/logo(w).png",
+      "maintainer": "BBIYAKYEE7(김재윤) <bbiyakyee7@gmail.com>",
+      "target": [
+        {
+          "target": "deb",
+          "arch": ["x64", "arm64"]
+        }
+      ]
+    },
+    "nsis": {
+      "oneClick": false,
+      "allowToChangeInstallationDirectory": true,
+      "createDesktopShortcut": true,
+      "createStartMenuShortcut": true,
+      "shortcutName": "Korea University Launcher",
+      "installerLanguages": ["ko-KR"],
+      "language": "1042"
+    }
   }
 }

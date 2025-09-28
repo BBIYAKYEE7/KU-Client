@@ -1,8 +1,59 @@
 const { app, BrowserWindow, nativeTheme, ipcMain } = require('electron');
 const path = require('path');
 const keytar = require('keytar');
+const AutoUpdater = require('./auto-updater');
 // 세션 상단바(빨간 줄) 사용 여부
 const ENABLE_SESSION_BAR = false;
+
+// 자동 업데이트 관련 변수
+let autoUpdaterInstance = null;
+let autoUpdaterInitialized = false;
+
+// 자동 업데이트 설정
+function setupAutoUpdater() {
+  // 이미 초기화된 경우 중복 실행 방지
+  if (autoUpdaterInitialized) {
+    console.log('자동 업데이트가 이미 초기화되어 있습니다.');
+    return;
+  }
+  
+  try {
+    autoUpdaterInstance = new AutoUpdater();
+    
+    // 자동 업데이트 확인 시작
+    autoUpdaterInstance.startAutoUpdateCheck();
+    
+    // IPC 핸들러 등록 (한 번만 등록)
+    ipcMain.handle('check-for-updates', async () => {
+      return await autoUpdaterInstance.checkForUpdatesManually();
+    });
+    
+    ipcMain.handle('enable-update-check', () => {
+      autoUpdaterInstance.enableUpdateCheck();
+    });
+    
+    ipcMain.handle('disable-update-check', () => {
+      autoUpdaterInstance.disableUpdateCheck();
+    });
+    
+    ipcMain.handle('enable-auto-update', () => {
+      autoUpdaterInstance.enableAutoUpdate();
+    });
+    
+    ipcMain.handle('disable-auto-update', () => {
+      autoUpdaterInstance.disableAutoUpdate();
+    });
+    
+    ipcMain.handle('get-auto-update-status', () => {
+      return autoUpdaterInstance.isAutoUpdateEnabled();
+    });
+    
+    autoUpdaterInitialized = true;
+    console.log('자동 업데이트 시스템이 초기화되었습니다.');
+  } catch (error) {
+    console.error('자동 업데이트 초기화 중 오류:', error);
+  }
+}
 
 // IPC 핸들러들을 앱 준비 후에 등록
 app.on('ready', () => {
@@ -508,6 +559,11 @@ function createWindow() {
     const theme = nativeTheme.shouldUseDarkColors ? 'dark' : 'light';
     win.webContents.send('system-theme-changed', theme);
   });
+
+  // 자동 업데이트 시작 (앱이 완전히 로드된 후)
+  setTimeout(() => {
+    setupAutoUpdater();
+  }, 3000); // 3초 후 업데이트 확인
 }
 
 app.whenReady().then(() => {
