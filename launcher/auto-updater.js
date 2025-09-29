@@ -6,9 +6,9 @@ class AutoUpdater {
   constructor() {
     this.currentVersion = app.getVersion();
     this.repoOwner = 'BBIYAKYEE7';
-    this.repoName = 'Korea-University-Launcher';
+    this.repoName = 'KU-Client';
     this.githubApiUrl = `https://api.github.com/repos/${this.repoOwner}/${this.repoName}/releases/latest`;
-    this.releaseUrl = 'https://github.com/BBIYAKYEE7/Korea-University-Launcher/releases/latest';
+    this.releaseUrl = 'https://github.com/BBIYAKYEE7/KU-Client/releases/latest';
     this.userSelectedArch = null; // 사용자가 선택한 아키텍처 (우선 적용)
   }
 
