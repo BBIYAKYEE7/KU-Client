@@ -20,10 +20,9 @@
   --ring: rgba(139, 0, 0, 0.20);
 }
 
-/* 테마 전환 부드럽게 */
+/* 테마 전환 애니메이션 제거 */
 .theme-transition, .theme-transition * {
-  transition: background-color .45s ease, color .45s ease, border-color .45s ease,
-              box-shadow .45s ease, backdrop-filter .45s ease, -webkit-backdrop-filter .45s ease;
+  transition: none;
 }
 
 * { box-sizing: border-box; }
