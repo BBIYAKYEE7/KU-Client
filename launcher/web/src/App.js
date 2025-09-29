@@ -93,6 +93,11 @@ function App() {
     if (storedTheme) {
       document.documentElement.setAttribute('data-theme', storedTheme);
       setCurrentTheme(storedTheme);
+      // 초기 로드 시에도 올바른 로고 설정
+      const heroImage = document.querySelector('.hero-image');
+      if (heroImage) {
+        heroImage.src = storedTheme === 'light' ? '/images/logo(w).png' : '/images/logo(b).png';
+      }
     }
   }, [storedTheme]);
   function toggleTheme() {
@@ -106,9 +111,14 @@ function App() {
       localStorage.setItem('theme', 'dark');
       setCurrentTheme('dark');
     }
+    // 메인 로고 교체
+    const heroImage = document.querySelector('.hero-image');
+    const themeNow = document.documentElement.getAttribute('data-theme') === 'light' ? 'light' : 'dark';
+    if (heroImage) {
+      heroImage.src = themeNow === 'light' ? '/images/logo(w).png' : '/images/logo(b).png';
+    }
     // 아이콘 교체 (라이트 모드에서 120주년 아이콘으로)
     const badge = document.querySelector('.footer-badge');
-    const themeNow = document.documentElement.getAttribute('data-theme') === 'light' ? 'light' : 'dark';
     if (badge) {
       badge.src = themeNow === 'light' ? '/images/kuni120-1-hd.png' : '/images/kuni120-2.png';
     }
