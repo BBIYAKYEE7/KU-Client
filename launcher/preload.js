@@ -207,6 +207,7 @@ contextBridge.exposeInMainWorld('launcher', {
 // ===== 빠른 LMS 자동 로그인 주입 =====
 (function fastLmsAutoLogin() {
   let creds = null;
+  let hasCompletedAutoLogin = false; // 로그인 성공/시도 완료 후 재시도 방지
   ipcRenderer.on('lms-credentials', (_e, payload) => {
     console.log('LMS preload에서 자격 증명 수신:', payload);
     creds = payload || null;
@@ -227,29 +228,26 @@ contextBridge.exposeInMainWorld('launcher', {
     try {
       const href = location.href;
       console.log('LMS 현재 URL 확인:', href);
-      
-      // 다양한 LMS 로그인 페이지 패턴 확인 (확장된 패턴)
-      const isLoginPage = /mylms\.korea\.ac\.kr\//.test(href) || 
-                         /lms\.korea\.ac\.kr\//.test(href) ||
-                         /sso\.korea\.ac\.kr\//.test(href) ||
-                         /\/Login\.do$/.test(href) ||
-                         /\/login\.php/.test(href) ||
-                         /kulms\.korea\.ac\.kr\//.test(href);
-      
-      // DOM 요소로도 확인 (확장된 선택자)
-      const hasLoginForm = document.getElementById('one_id') || 
-                          document.getElementById('loginFrm') ||
-                          document.querySelector('input[name="one_id"]') ||
-                          document.querySelector('input[name="user_id"]') ||
-                          document.querySelector('input[placeholder*="KUPID"]') ||
-                          document.querySelector('input[placeholder*="Single ID"]') ||
-                          document.querySelector('input[placeholder*="아이디"]') ||
-                          document.querySelector('input[type="password"]');
-      
+      const url = new URL(href);
+      const host = url.hostname;
+      const path = url.pathname + url.search;
+
+      // 로그인 전용 호스트/경로만 허용 (프로필/설정 등 일반 페이지 제외)
+      const isLoginHost = /^(sso|lms)\.korea\.ac\.kr$/i.test(host);
+      const isExplicitLoginPath = /(Login|login)\b|Login\.do|login\.php/i.test(path) || /Login\.do/i.test(href);
+
+      // DOM 상의 로그인 폼(정확한 선택자만) 존재 여부
+      const hasLoginForm = document.getElementById('loginFrm') ||
+                           document.querySelector('form[name="loginFrm"]') ||
+                           document.querySelector('form[action*="Login.do"]') ||
+                           document.querySelector('button.userTypeCheck, button[onclick*="userTypeCheck"]');
+
+      const isLoginPage = (isLoginHost || isExplicitLoginPath) && !!hasLoginForm;
+
       console.log('LMS 로그인 페이지 여부:', isLoginPage);
       console.log('LMS 로그인 폼 요소 존재:', !!hasLoginForm);
-      
-      return isLoginPage || !!hasLoginForm;
+
+      return isLoginPage;
     } catch (error) {
       console.error('LMS URL 확인 오류:', error);
       return false;
@@ -258,6 +256,10 @@ contextBridge.exposeInMainWorld('launcher', {
 
   function fillAndSubmit() {
     try {
+      if (hasCompletedAutoLogin) {
+        console.log('LMS 자동 로그인 이미 완료됨. 재시도 중단');
+        return true;
+      }
       if (!creds || !creds.account || !creds.password) {
         console.log('LMS 자격 증명이 없음:', { 
           creds: creds, 
@@ -277,16 +279,11 @@ contextBridge.exposeInMainWorld('launcher', {
       // LMS 로그인 폼 요소 찾기 (LMS 특화 - 더 정확한 선택자)
       var idEl = document.getElementById('one_id') || 
                  document.querySelector('input[name="one_id"]') ||
-                 document.querySelector('input[name="user_id"]') ||
-                 document.querySelector('input[placeholder*="KUPID"]') ||
-                 document.querySelector('input[placeholder*="Single ID"]') ||
-                 document.querySelector('input[type="text"]');
+                 document.querySelector('input[name="user_id"]');
       
       var pwEl = document.getElementById('password') ||
                  document.querySelector('input[name="user_password"]') ||
-                 document.querySelector('input[name="password"]') ||
-                 document.querySelector('input[placeholder*="Password"]') ||
-                 document.querySelector('input[type="password"]');
+                 document.querySelector('input[name="password"]');
       
       console.log('LMS 로그인 필드 찾기:', {
         idEl: !!idEl,
@@ -327,15 +324,12 @@ contextBridge.exposeInMainWorld('launcher', {
       var btn = document.querySelector('button[type="button"].userTypeCheck') ||
                 document.querySelector('button[onclick*="userTypeCheck"]') ||
                 document.querySelector('input[type="submit"]') || 
-                document.querySelector('button[type="submit"]') ||
-                document.querySelector('input[value="Login"]') ||
-                document.querySelector('input[value="로그인"]') ||
-                document.querySelector('.ibtn') ||
-                document.querySelector('button[onclick*="login"]');
+                document.querySelector('button[type="submit"]');
       
       if (btn) { 
         console.log('LMS 로그인 버튼 클릭 시도');
         btn.click(); 
+        hasCompletedAutoLogin = true;
         return true; 
       }
       
@@ -343,12 +337,12 @@ contextBridge.exposeInMainWorld('launcher', {
       var form = document.getElementById('loginFrm') ||
                  document.querySelector('form[name="loginFrm"]') ||
                  document.querySelector('form[action*="Login.do"]') ||
-                 document.querySelector('form[method="post"]') ||
-                 document.querySelector('form');
+                 document.querySelector('form[method="post"]');
       
       if (form) { 
         console.log('LMS 폼 제출 시도');
         form.submit(); 
+        hasCompletedAutoLogin = true;
         return true; 
       }
       
@@ -357,6 +351,7 @@ contextBridge.exposeInMainWorld('launcher', {
       pwEl.dispatchEvent(new KeyboardEvent('keydown', { key: 'Enter', code: 'Enter', keyCode: 13, which: 13, bubbles: true }));
       pwEl.dispatchEvent(new KeyboardEvent('keypress', { key: 'Enter', code: 'Enter', keyCode: 13, which: 13, bubbles: true }));
       pwEl.dispatchEvent(new KeyboardEvent('keyup', { key: 'Enter', code: 'Enter', keyCode: 13, which: 13, bubbles: true }));
+      hasCompletedAutoLogin = true;
       return true;
     } catch (error) {
       console.error('LMS 자동 로그인 오류:', error);
@@ -366,6 +361,10 @@ contextBridge.exposeInMainWorld('launcher', {
 
   function tryInject() {
     console.log('LMS 자동 로그인 시도 시작');
+    if (hasCompletedAutoLogin) {
+      console.log('LMS 자동 로그인 완료 상태, 추가 시도 생략');
+      return;
+    }
     
     // 자격 증명이 없으면 시도하지 않음
     if (!creds || !creds.account || !creds.password) {
@@ -402,7 +401,7 @@ contextBridge.exposeInMainWorld('launcher', {
     const t = setInterval(() => { 
       tries++; 
       console.log(`LMS 자동 로그인 재시도 ${tries}/20`);
-      if (fillAndSubmit() || tries > 20) {
+      if (hasCompletedAutoLogin || fillAndSubmit() || tries > 20) {
         console.log(tries > 20 ? 'LMS 최대 재시도 횟수 초과' : 'LMS 자동 로그인 성공');
         clearInterval(t);
         obs.disconnect();
