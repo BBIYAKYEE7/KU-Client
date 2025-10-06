@@ -17,6 +17,46 @@ contextBridge.exposeInMainWorld('launcher', {
   migrateFromKupidConfig: () => ipcRenderer.invoke('migrate-from-kupid-config')
 });
 
+// ===== Canvas 경고 배너 즉시 억제(최초 깜빡임 방지) =====
+(function suppressCanvasWarningEarly() {
+  try {
+    const href = location.href;
+    const host = location.hostname || '';
+    const isCanvasRelated = /(?:^|\.)mylms\.korea\.ac\.kr$/i.test(host) || /(?:^|\.)lms\.korea\.ac\.kr$/i.test(host) || /instructure\.com/i.test(href);
+    if (!isCanvasRelated) return;
+
+    const styleText = '.ic-flash-warning.flash-message-container.unsupported_browser{display:none!important;visibility:hidden!important;opacity:0!important;}';
+    function injectStyleOnce() {
+      try {
+        if (document.getElementById('__kuCanvasHideStyle')) return;
+        const style = document.createElement('style');
+        style.id = '__kuCanvasHideStyle';
+        style.type = 'text/css';
+        style.appendChild(document.createTextNode(styleText));
+        (document.head || document.documentElement).appendChild(style);
+      } catch (_) {}
+    }
+
+    // 가능한 한 빨리 스타일 주입
+    injectStyleOnce();
+    document.addEventListener('readystatechange', injectStyleOnce, true);
+    document.addEventListener('DOMContentLoaded', injectStyleOnce, true);
+
+    // 배너 노드가 생성되자마자 제거
+    const removeNow = () => {
+      try {
+        document.querySelectorAll('.ic-flash-warning.flash-message-container.unsupported_browser').forEach(el => el.remove());
+      } catch (_) {}
+    };
+    removeNow();
+    const mo = new MutationObserver(() => removeNow());
+    mo.observe(document.documentElement, { childList: true, subtree: true });
+
+    // 5초 후 옵저버 정리 (초기 로드 구간만 감시)
+    setTimeout(() => { try { mo.disconnect(); } catch (_) {} }, 5000);
+  } catch (_) {}
+})();
+
 // ===== 빠른 포털 자동 로그인 주입 =====
 // 메인에서 자격증명을 받으면, 로그인 페이지에서 즉시 채우고 제출
 (function fastPortalAutoLogin() {
@@ -165,26 +205,17 @@ contextBridge.exposeInMainWorld('launcher', {
       return;
     }
     
-    console.log('첫 번째 시도 실패, DOM 변화 감지 시작');
-    const obs = new MutationObserver((_m, o) => { 
-      if (fillAndSubmit()) { 
-        console.log('DOM 변화 감지로 자동 로그인 성공');
-        o.disconnect(); 
-      } 
-    });
-    obs.observe(document.documentElement, { childList: true, subtree: true });
-    
-    // 안전망: 아주 빠른 재시도 몇 번
+    console.log('첫 번째 시도 실패, 빠른 재시도 시작');
+    // 더 빠른 재시도 (간격 단축)
     let tries = 0;
     const t = setInterval(() => {
       tries++;
-      console.log(`자동 로그인 재시도 ${tries}/20`);
-      if (fillAndSubmit() || tries > 20) {
-        console.log(tries > 20 ? '최대 재시도 횟수 초과' : '자동 로그인 성공');
+      console.log(`자동 로그인 재시도 ${tries}/10`);
+      if (fillAndSubmit() || tries > 10) {
+        console.log(tries > 10 ? '최대 재시도 횟수 초과' : '자동 로그인 성공');
         clearInterval(t);
-        obs.disconnect();
       }
-    }, 25);
+    }, 50); // 25ms -> 50ms로 조정하여 안정성 향상
   }
 
   // DOM 상태 변화에 맞춰 최대한 빠르게 시도

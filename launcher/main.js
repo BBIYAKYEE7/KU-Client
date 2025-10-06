@@ -321,6 +321,26 @@ ipcMain.handle('launcher-open-lms', (event, { account, password } = {}) => {
     if (/mylms\.korea\.ac\.kr|lms\.korea\.ac\.kr|sso\.korea\.ac\.kr/.test(url)) {
       console.log('LMS 로그인 페이지 감지, 자동 로그인 시도');
       await tryLMSAutoLogin();
+      // Canvas 브라우저 지원 경고 배너 최소 침습 제거
+      try {
+        await child.webContents.executeJavaScript(`(function(){
+          if (window.__kuCanvasBannerRemoved) return; 
+          window.__kuCanvasBannerRemoved = true;
+
+          function hideCanvasBanner() {
+            try {
+              // 정확한 컨테이너 제거
+              document.querySelectorAll('.ic-flash-warning.flash-message-container.unsupported_browser').forEach(el => el.remove());
+              // 혹시 닫기 버튼만 있는 경우 자동 클릭
+              document.querySelectorAll('.ic-flash-warning .close_link, .ic-flash-warning .Button--icon-action, .ic-flash-warning .icon-x').forEach(btn => { try { btn.click(); } catch(_){} });
+            } catch (_) {}
+          }
+          hideCanvasBanner();
+          // 초기 로드 후 잠깐 반복해서 생성 차단
+          let i = 0; 
+          const timer = setInterval(() => { hideCanvasBanner(); if (++i > 50) clearInterval(timer); }, 100);
+        })();`);
+      } catch (_) {}
     }
   });
 
@@ -448,6 +468,19 @@ ipcMain.handle('launcher-open-lms', (event, { account, password } = {}) => {
   child.webContents.on('did-navigate-in-page', async (_e, url) => {
     if (/mylms\.korea\.ac\.kr|lms\.korea\.ac\.kr|sso\.korea\.ac\.kr/.test(url)) {
       setTimeout(() => { tryLMSAutoLogin(); }, 200);
+      // 네비게이션 시에도 경고 배너 제거 재시도
+      try {
+        await child.webContents.executeJavaScript(`(function(){
+          function hideCanvasBanner() {
+            try {
+              document.querySelectorAll('.ic-flash-warning.flash-message-container.unsupported_browser').forEach(el => el.remove());
+              document.querySelectorAll('.ic-flash-warning .close_link, .ic-flash-warning .Button--icon-action, .ic-flash-warning .icon-x').forEach(btn => { try { btn.click(); } catch(_){} });
+            } catch (_) {}
+          }
+          hideCanvasBanner();
+          let i = 0; const timer = setInterval(() => { hideCanvasBanner(); if (++i > 30) clearInterval(timer); }, 100);
+        })();`);
+      } catch (_) {}
     }
   });
 
