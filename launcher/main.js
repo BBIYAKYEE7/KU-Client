@@ -9,6 +9,24 @@ const ENABLE_SESSION_BAR = false;
 let autoUpdaterInstance = null;
 let autoUpdaterInitialized = false;
 
+// PDF 또는 PDF 뷰어(구글 Docs/Drive 포함) URL 여부 판별
+function isPdfLikeUrl(rawUrl) {
+  try {
+    if (!rawUrl || typeof rawUrl !== 'string') return false;
+    const url = rawUrl;
+    // 직접 PDF 혹은 데이터/블롭
+    if (/^data:|^blob:/i.test(url)) return true;
+    if (/\.pdf($|\?|#)/i.test(url)) return true;
+    if (/mimeType=application%2Fpdf|mime=application%2Fpdf/i.test(url)) return true;
+    // 구글 문서/드라이브/콘텐츠 뷰어
+    if (/docs\.google\.com\/gview/i.test(url)) return true;
+    if (/drive\.google\.com\/(file\/|uc\?|open\?|preview|view)/i.test(url)) return true;
+    if (/googleusercontent\.com\/viewer/i.test(url)) return true;
+    if (/viewerng\/viewer\?/i.test(url)) return true; // 일부 구글 뷰어 변종
+    return false;
+  } catch (_) { return false; }
+}
+
 // 자동 업데이트 설정
 function setupAutoUpdater() {
   // 이미 초기화된 경우 중복 실행 방지
@@ -70,6 +88,19 @@ ipcMain.handle('launcher-open-portal', (event, { account, password } = {}) => {
       disableDialogs: true
     }
   });
+  
+  // 새 창 열기 제어: PDF/구글뷰어는 현재 창에서 열고, 외부 링크는 기본 브라우저로
+  try {
+    child.webContents.setWindowOpenHandler(({ url }) => {
+      try {
+        if (isPdfLikeUrl(url)) {
+          child.loadURL(url);
+          return { action: 'deny' };
+        }
+      } catch (_) {}
+      return { action: 'allow' };
+    });
+  } catch (_) {}
   // 로그인 페이지를 직접 열어 자동 로그인 안정화 (Intro는 세션 모달로 막히는 경우가 있어 Login.kpd로 진입)
   const loginUrl = 'https://portal.korea.ac.kr/common/Login.kpd';
   const referrer = 'https://portal.korea.ac.kr/front/Main.kpd';
@@ -223,7 +254,8 @@ ipcMain.handle('launcher-open-portal', (event, { account, password } = {}) => {
   });
 
   // in-page 내비게이션에서도 폰트 유지 주입
-  child.webContents.on('did-navigate-in-page', async (_e, url) => {
+  child.webContents.on('did-navigate-in-page', async (_e, url, isMainFrame) => {
+    if (!isMainFrame) return; // 서브프레임은 무시
     if (/portal\.korea\.ac\.kr\//.test(url)) {
       try {
         await child.webContents.insertCSS(`
@@ -238,17 +270,24 @@ ipcMain.handle('launcher-open-portal', (event, { account, password } = {}) => {
     }
   });
 
-  // 로그인 성공 시 메인으로 이동
+  // 포털 네비게이션 처리: PDF/뷰어는 간섭하지 않고, 특수한 오류/인트로 페이지에서만 로그인으로 복귀
   child.webContents.on('did-navigate', (e, url) => {
+    // PDF/구글뷰어/데이터/블롭 미리보기는 간섭하지 않음
+    if (isPdfLikeUrl(url)) return;
     if (/portal\.korea\.ac\.kr\/front\/Main\.kpd/.test(url)) return; // 이미 메인
-    // Intro나 타임아웃 페이지로 간 경우 로그인 페이지로 돌림
-    if (/portal\.korea\.ac\.kr\/.+/.test(url) && !/common\/Login\.kpd/.test(url)) {
+    // 포털 도메인 내 특수 페이지(인트로/세션만료/오류 등)에서만 로그인으로 복귀
+    if (/portal\.korea\.ac\.kr\/.+/.test(url)
+        && !/common\/Login\.kpd/.test(url)
+        && /(intro|Intro|session|expired|timeout|Timeout|invalid|Invalid|error|Error)\b/.test(url)) {
       child.loadURL(loginUrl, { httpReferrer: referrer });
     }
   });
 
   // 리다이렉트 이벤트에도 대비하여 재시도
-  child.webContents.on('did-redirect-navigation', (e, url) => {
+  child.webContents.on('did-redirect-navigation', (e, url, _isInPlace, isMainFrame) => {
+    if (!isMainFrame) return; // 서브프레임은 무시
+    // PDF/구글뷰어/데이터/블롭 미리보기는 간섭하지 않음
+    if (isPdfLikeUrl(url)) return;
     if (/portal\.korea\.ac\.kr\/common\/Login\.kpd/.test(url)) {
       console.log('포털 로그인 페이지 리다이렉트 감지, 자동 로그인 재시도');
       setTimeout(() => { tryFillAndSubmit(); }, 200);
@@ -256,16 +295,22 @@ ipcMain.handle('launcher-open-portal', (event, { account, password } = {}) => {
   });
 
   // 페이지 로드 완료 후에도 자동 로그인 시도
-  child.webContents.on('did-finish-load', async () => {
-    const url = child.webContents.getURL();
+  child.webContents.on('did-finish-load', async (_e) => {
+    const url = child.webContents.getURL(); // 메인 프레임 기준 URL
+    // PDF/구글뷰어/데이터/블롭 미리보기는 간섭하지 않음
+    if (isPdfLikeUrl(url)) return;
     if (/portal\.korea\.ac\.kr\/common\/Login\.kpd/.test(url)) {
       console.log('포털 로그인 페이지 완전 로드 완료, 자동 로그인 재시도');
       setTimeout(() => { tryFillAndSubmit(); }, 500);
     }
   });
 
-  // 네트워크 에러/빈 페이지 방어 재시도
-  child.webContents.on('did-fail-load', () => {
+  // 네트워크 에러/빈 페이지 방어 재시도 (PDF/뷰어는 예외)
+  child.webContents.on('did-fail-load', (_e, errorCode, errorDesc, validatedURL, isMainFrame) => {
+    if (!isMainFrame) return; // 서브프레임 실패는 무시
+    try {
+      if (validatedURL && isPdfLikeUrl(validatedURL)) return;
+    } catch(_) {}
     child.loadURL(loginUrl, { httpReferrer: referrer });
   });
 });
@@ -292,6 +337,19 @@ ipcMain.handle('launcher-open-lms', (event, { account, password } = {}) => {
     }
   });
   
+  // 새 창 열기 제어: PDF/구글뷰어는 현재 창에서 열고, 외부 링크는 기본 브라우저로
+  try {
+    child.webContents.setWindowOpenHandler(({ url }) => {
+      try {
+        if (isPdfLikeUrl(url)) {
+          child.loadURL(url);
+          return { action: 'deny' };
+        }
+      } catch (_) {}
+      return { action: 'allow' };
+    });
+  } catch (_) {}
+  
   // LMS 로그인 페이지로 직접 이동
   const lmsLoginUrl = 'https://mylms.korea.ac.kr/';
   child.loadURL(lmsLoginUrl);
@@ -314,11 +372,11 @@ ipcMain.handle('launcher-open-lms', (event, { account, password } = {}) => {
     }
   };
 
-  // LMS 페이지 로드가 끝나면 자동 로그인 시도
+  // LMS 페이지 로드가 끝나면 자동 로그인 시도 (로그인 관련 페이지에서만)
   child.webContents.on('dom-ready', async () => {
-    const url = child.webContents.getURL();
+    const url = child.webContents.getURL(); // 메인 프레임 기준 URL
     console.log('LMS 페이지 로드 완료:', url);
-    if (/mylms\.korea\.ac\.kr|lms\.korea\.ac\.kr|sso\.korea\.ac\.kr/.test(url)) {
+    if ((/sso\.korea\.ac\.kr/.test(url)) || (/mylms\.korea\.ac\.kr|lms\.korea\.ac\.kr/.test(url) && /(login|Login|signin|auth)/i.test(url))) {
       console.log('LMS 로그인 페이지 감지, 자동 로그인 시도');
       await tryLMSAutoLogin();
       // Canvas 브라우저 지원 경고 배너 최소 침습 제거
@@ -457,16 +515,21 @@ ipcMain.handle('launcher-open-lms', (event, { account, password } = {}) => {
   });
 
   // 페이지 로드 완료 후에도 자동 로그인 시도
-  child.webContents.on('did-finish-load', async () => {
-    const url = child.webContents.getURL();
-    if (/mylms\.korea\.ac\.kr|lms\.korea\.ac\.kr|sso\.korea\.ac\.kr/.test(url)) {
+  child.webContents.on('did-finish-load', async (_e) => {
+    const url = child.webContents.getURL(); // 메인 프레임 기준 URL
+    // PDF/구글뷰어/데이터/블롭 미리보기는 간섭하지 않음
+    if (isPdfLikeUrl(url)) return;
+    if ((/sso\.korea\.ac\.kr/.test(url)) || (/mylms\.korea\.ac\.kr|lms\.korea\.ac\.kr/.test(url) && /(login|Login|signin|auth)/i.test(url))) {
       console.log('LMS 페이지 완전 로드 완료, 자동 로그인 재시도');
       setTimeout(() => { tryLMSAutoLogin(); }, 500);
     }
   });
 
-  child.webContents.on('did-navigate-in-page', async (_e, url) => {
-    if (/mylms\.korea\.ac\.kr|lms\.korea\.ac\.kr|sso\.korea\.ac\.kr/.test(url)) {
+  child.webContents.on('did-navigate-in-page', async (_e, url, isMainFrame) => {
+    if (!isMainFrame) return; // 서브프레임은 무시
+    // PDF/구글뷰어/데이터/블롭 미리보기는 간섭하지 않음
+    if (isPdfLikeUrl(url)) return;
+    if ((/sso\.korea\.ac\.kr/.test(url)) || (/mylms\.korea\.ac\.kr|lms\.korea\.ac\.kr/.test(url) && /(login|Login|signin|auth)/i.test(url))) {
       setTimeout(() => { tryLMSAutoLogin(); }, 200);
       // 네비게이션 시에도 경고 배너 제거 재시도
       try {
@@ -484,14 +547,21 @@ ipcMain.handle('launcher-open-lms', (event, { account, password } = {}) => {
     }
   });
 
-  child.webContents.on('did-redirect-navigation', (_e, url) => {
-    if (/mylms\.korea\.ac\.kr|lms\.korea\.ac\.kr|sso\.korea\.ac\.kr/.test(url)) {
+  child.webContents.on('did-redirect-navigation', (_e, url, _isInPlace, isMainFrame) => {
+    if (!isMainFrame) return; // 서브프레임은 무시
+    // PDF/구글뷰어/데이터/블롭 미리보기는 간섭하지 않음
+    if (isPdfLikeUrl(url)) return;
+    if ((/sso\.korea\.ac\.kr/.test(url)) || (/mylms\.korea\.ac\.kr|lms\.korea\.ac\.kr/.test(url) && /(login|Login|signin|auth)/i.test(url))) {
       setTimeout(() => { tryLMSAutoLogin(); }, 200);
     }
   });
 
-  // 네트워크 에러/빈 페이지 방어 재시도
-  child.webContents.on('did-fail-load', () => {
+  // 네트워크 에러/빈 페이지 방어 재시도 (PDF/뷰어는 예외)
+  child.webContents.on('did-fail-load', (_e, errorCode, errorDesc, validatedURL, isMainFrame) => {
+    if (!isMainFrame) return; // 서브프레임 실패는 무시
+    try {
+      if (validatedURL && isPdfLikeUrl(validatedURL)) return;
+    } catch(_) {}
     child.loadURL(lmsLoginUrl);
   });
 });
