@@ -1,5 +1,6 @@
-const { app, BrowserWindow, nativeTheme, ipcMain } = require('electron');
+const { app, BrowserWindow, nativeTheme, ipcMain, Notification } = require('electron');
 const path = require('path');
+const fs = require('fs');
 const keytar = require('keytar');
 const AutoUpdater = require('./auto-updater');
 // 세션 상단바(빨간 줄) 사용 여부
@@ -8,6 +9,13 @@ const ENABLE_SESSION_BAR = false;
 // 자동 업데이트 관련 변수
 let autoUpdaterInstance = null;
 let autoUpdaterInitialized = false;
+
+// 알림 관련 변수
+let messageCheckInterval;
+let assignmentCheckInterval;
+let lastMessageCount = 0;
+let lastAssignmentData = null;
+let lmsWindows = new Map(); // LMS 창들을 추적하기 위한 Map
 
 // PDF 또는 PDF 뷰어(구글 Docs/Drive 포함) URL 여부 판별
 function isPdfLikeUrl(rawUrl) {
@@ -25,6 +33,258 @@ function isPdfLikeUrl(rawUrl) {
     if (/viewerng\/viewer\?/i.test(url)) return true; // 일부 구글 뷰어 변종
     return false;
   } catch (_) { return false; }
+}
+
+// 데스크탑 알림 표시 함수
+function showNotification(title, body, icon = null) {
+  if (Notification.isSupported()) {
+    const notification = new Notification({
+      title: title,
+      body: body,
+      icon: icon || path.join(__dirname, 'image/logo.png'),
+      sound: true,
+      urgency: 'normal'
+    });
+    
+    notification.on('click', () => {
+      // LMS 창이 있으면 포커스, 없으면 새로 열기
+      const lmsWindow = Array.from(lmsWindows.values())[0];
+      if (lmsWindow && !lmsWindow.isDestroyed()) {
+        lmsWindow.show();
+        lmsWindow.focus();
+      }
+    });
+    
+    notification.show();
+  }
+}
+
+// 메시지 수신 체크 함수
+async function checkForNewMessages() {
+  const activeLmsWindows = Array.from(lmsWindows.values()).filter(win => !win.isDestroyed());
+  
+  if (activeLmsWindows.length === 0) {
+    return;
+  }
+
+  for (const lmsWindow of activeLmsWindows) {
+    try {
+      const result = await lmsWindow.webContents.executeJavaScript(`
+        (async () => {
+          try {
+            // 메시지함 페이지로 이동
+            const currentUrl = window.location.href;
+            if (!currentUrl.includes('conversations')) {
+              // 메시지함 페이지로 이동
+              window.location.href = 'https://mylms.korea.ac.kr/conversations#filter=type=inbox';
+              return { success: false, message: '메시지함 페이지로 이동 중' };
+            }
+            
+            // 페이지 로딩 대기
+            await new Promise(resolve => setTimeout(resolve, 2000));
+            
+            // 읽지 않은 메시지 수 확인
+            const unreadElements = document.querySelectorAll('.unread, .new, [class*="unread"], [class*="new"]');
+            const unreadCount = unreadElements.length;
+            
+            // 또는 메시지 목록에서 읽지 않은 메시지 확인
+            const messageRows = document.querySelectorAll('tr, .message-item, .conversation-item');
+            let actualUnreadCount = 0;
+            
+            messageRows.forEach(row => {
+              if (row.textContent.includes('읽지 않음') || 
+                  row.classList.contains('unread') || 
+                  row.classList.contains('new') ||
+                  row.querySelector('.unread, .new')) {
+                actualUnreadCount++;
+              }
+            });
+            
+            return { 
+              success: true, 
+              unreadCount: Math.max(unreadCount, actualUnreadCount),
+              currentUrl: window.location.href
+            };
+          } catch (error) {
+            return { success: false, message: error.message };
+          }
+        })();
+      `);
+      
+      if (result.success && result.unreadCount > lastMessageCount) {
+        const newMessageCount = result.unreadCount - lastMessageCount;
+        showNotification(
+          '새 메시지가 도착했습니다',
+          `${newMessageCount}개의 새 메시지가 있습니다.`,
+          path.join(__dirname, 'image/logo.png')
+        );
+      }
+      
+      lastMessageCount = result.unreadCount || 0;
+    } catch (error) {
+      console.error('메시지 체크 중 오류:', error);
+    }
+  }
+}
+
+// 과제 마감일 체크 함수
+async function checkAssignmentDeadlines() {
+  const activeLmsWindows = Array.from(lmsWindows.values()).filter(win => !win.isDestroyed());
+  
+  if (activeLmsWindows.length === 0) {
+    return;
+  }
+
+  for (const lmsWindow of activeLmsWindows) {
+    try {
+      const result = await lmsWindow.webContents.executeJavaScript(`
+        (async () => {
+          try {
+            // 캘린더 페이지로 이동
+            const currentUrl = window.location.href;
+            if (!currentUrl.includes('calendar')) {
+              window.location.href = 'https://mylms.korea.ac.kr/calendar';
+              return { success: false, message: '캘린더 페이지로 이동 중' };
+            }
+            
+            // 페이지 로딩 대기
+            await new Promise(resolve => setTimeout(resolve, 2000));
+            
+            // 과제 정보 수집
+            const assignments = [];
+            const now = new Date();
+            
+            // 캘린더 이벤트에서 과제 정보 추출
+            const events = document.querySelectorAll('.fc-event, .event, .assignment, [class*="assignment"]');
+            
+            events.forEach(event => {
+              const title = event.textContent || event.title || '';
+              const timeElement = event.querySelector('.time, .date, [class*="time"], [class*="date"]');
+              const timeText = timeElement ? timeElement.textContent : '';
+              
+              if (title && (title.includes('과제') || title.includes('Assignment') || title.includes('제출'))) {
+                // 시간 파싱 시도
+                const deadline = parseDeadline(timeText);
+                if (deadline) {
+                  assignments.push({
+                    title: title.trim(),
+                    deadline: deadline,
+                    timeText: timeText
+                  });
+                }
+              }
+            });
+            
+            // 또는 다른 방식으로 과제 정보 수집
+            const assignmentElements = document.querySelectorAll('[class*="assignment"], [id*="assignment"]');
+            assignmentElements.forEach(element => {
+              const title = element.textContent || '';
+              if (title.includes('과제') || title.includes('Assignment')) {
+                const deadline = parseDeadline(title);
+                if (deadline) {
+                  assignments.push({
+                    title: title.trim(),
+                    deadline: deadline,
+                    timeText: title
+                  });
+                }
+              }
+            });
+            
+            function parseDeadline(timeText) {
+              if (!timeText) return null;
+              
+              // 다양한 시간 형식 파싱
+              const patterns = [
+                /(\\d{4})[\\-\\/](\\d{1,2})[\\-\\/](\\d{1,2})\\s+(\\d{1,2}):(\\d{2})/,
+                /(\\d{1,2})[\\-\\/](\\d{1,2})[\\-\\/](\\d{4})\\s+(\\d{1,2}):(\\d{2})/,
+                /(\\d{1,2})\\/(\\d{1,2})\\/(\\d{4})\\s+(\\d{1,2}):(\\d{2})/
+              ];
+              
+              for (const pattern of patterns) {
+                const match = timeText.match(pattern);
+                if (match) {
+                  const year = match[1];
+                  const month = match[2];
+                  const day = match[3];
+                  const hour = match[4];
+                  const minute = match[5];
+                  return new Date(year, month - 1, day, hour, minute);
+                }
+              }
+              
+              return null;
+            }
+            
+            return { 
+              success: true, 
+              assignments: assignments,
+              currentUrl: window.location.href
+            };
+          } catch (error) {
+            return { success: false, message: error.message };
+          }
+        })();
+      `);
+      
+      if (result.success && result.assignments) {
+        const now = new Date();
+        const notificationTimes = [60, 30, 10, 5, 1]; // 분 단위
+        
+        result.assignments.forEach(assignment => {
+          const timeDiff = assignment.deadline - now;
+          const minutesUntilDeadline = Math.floor(timeDiff / (1000 * 60));
+          
+          // 알림 시간 체크
+          notificationTimes.forEach(notificationTime => {
+            if (minutesUntilDeadline <= notificationTime && minutesUntilDeadline > 0) {
+              // 이전에 알림을 보냈는지 확인
+              const notificationKey = assignment.title + '_' + notificationTime;
+              if (!lastAssignmentData || !lastAssignmentData[notificationKey]) {
+                showNotification(
+                  '과제 마감 알림',
+                  '"' + assignment.title + '" 과제가 ' + notificationTime + '분 후 마감됩니다.',
+                  path.join(__dirname, 'image/logo.png')
+                );
+                
+                // 알림 보낸 기록 저장
+                if (!lastAssignmentData) lastAssignmentData = {};
+                lastAssignmentData[notificationKey] = true;
+              }
+            }
+          });
+        });
+      }
+    } catch (error) {
+      console.error('과제 마감일 체크 중 오류:', error);
+    }
+  }
+}
+
+// 알림 체크 시작
+function startNotificationChecks() {
+  // 메시지 체크 (5분마다)
+  messageCheckInterval = setInterval(checkForNewMessages, 5 * 60 * 1000);
+  
+  // 과제 마감일 체크 (1분마다)
+  assignmentCheckInterval = setInterval(checkAssignmentDeadlines, 1 * 60 * 1000);
+  
+  console.log('알림 체크가 시작되었습니다.');
+}
+
+// 알림 체크 중지
+function stopNotificationChecks() {
+  if (messageCheckInterval) {
+    clearInterval(messageCheckInterval);
+    messageCheckInterval = null;
+  }
+  
+  if (assignmentCheckInterval) {
+    clearInterval(assignmentCheckInterval);
+    assignmentCheckInterval = null;
+  }
+  
+  console.log('알림 체크가 중지되었습니다.');
 }
 
 // 자동 업데이트 설정
@@ -85,16 +345,26 @@ ipcMain.handle('launcher-open-portal', (event, { account, password } = {}) => {
     backgroundColor: nativeTheme.shouldUseDarkColors ? '#0f1115' : '#ffffff',
     webPreferences: {
       preload: path.join(__dirname, 'preload.js'),
-      disableDialogs: true
+      disableDialogs: true,
+      nodeIntegration: false,
+      contextIsolation: true,
+      sandbox: true,
+      devTools: false,
+      webSecurity: true
     }
   });
   
   // 새 창 열기 제어: PDF/구글뷰어는 현재 창에서 열고, 외부 링크는 기본 브라우저로
   try {
-    child.webContents.setWindowOpenHandler(({ url }) => {
+  child.webContents.setWindowOpenHandler(({ url }) => {
       try {
         if (isPdfLikeUrl(url)) {
           child.loadURL(url);
+          return { action: 'deny' };
+        }
+        // 다운로드 링크 가로채기: 쿼리 노출 방지 (새 창 금지)
+        if (/download|file|attachment|assign|submission|export/i.test(url)) {
+          try { child.webContents.session.downloadURL(url); } catch (_) {}
           return { action: 'deny' };
         }
       } catch (_) {}
@@ -124,25 +394,14 @@ ipcMain.handle('launcher-open-portal', (event, { account, password } = {}) => {
   } catch (_) {}
 
   const tryFillAndSubmit = async () => {
-    console.log('자격 증명 전달 시도:', { 
-      hasAccount: !!account, 
-      hasPassword: !!password, 
-      accountLength: account ? account.length : 0,
-      passwordLength: password ? password.length : 0,
-      account: account,
-      password: password ? '[HIDDEN]' : null
-    });
+    // 민감 정보 로그 제거
     
     if (!account || !password) {
-      console.log('자격 증명이 없어서 자동 로그인 중단');
-      console.log('계정:', account);
-      console.log('비밀번호:', password ? '[HIDDEN]' : null);
       return;
     }
     
     try {
       // 프리로드로 즉시 전달하여 최대한 빠르게 처리
-      console.log('자격 증명을 preload로 전달');
       child.webContents.send('portal-credentials', { account, password });
     } catch (error) {
       console.error('자격 증명 전달 오류:', error);
@@ -153,9 +412,7 @@ ipcMain.handle('launcher-open-portal', (event, { account, password } = {}) => {
   // 모든 리소스 로드를 기다리지 않고, DOM 준비 직후 시도
   child.webContents.on('dom-ready', async () => {
     const url = child.webContents.getURL();
-    console.log('포털 페이지 로드 완료:', url);
     if (/portal\.korea\.ac\.kr\/common\/Login\.kpd/.test(url)) {
-      console.log('포털 로그인 페이지 감지, 자동 로그인 시도');
       await tryFillAndSubmit();
     }
     // Pretendard 글꼴 전역 적용 (로그인 이후 페이지 포함 모든 포털 도메인에 주입)
@@ -300,7 +557,6 @@ ipcMain.handle('launcher-open-portal', (event, { account, password } = {}) => {
     // PDF/구글뷰어/데이터/블롭 미리보기는 간섭하지 않음
     if (isPdfLikeUrl(url)) return;
     if (/portal\.korea\.ac\.kr\/common\/Login\.kpd/.test(url)) {
-      console.log('포털 로그인 페이지 완전 로드 완료, 자동 로그인 재시도');
       setTimeout(() => { tryFillAndSubmit(); }, 500);
     }
   });
@@ -335,6 +591,15 @@ ipcMain.handle('launcher-open-lms', (event, { account, password } = {}) => {
       preload: path.join(__dirname, 'preload.js'),
       disableDialogs: true
     }
+  });
+  
+  // LMS 창을 Map에 추가
+  const windowId = child.id;
+  lmsWindows.set(windowId, child);
+  
+  // 창이 닫힐 때 Map에서 제거
+  child.on('closed', () => {
+    lmsWindows.delete(windowId);
   });
   
   // 새 창 열기 제어: PDF/구글뷰어는 현재 창에서 열고, 외부 링크는 기본 브라우저로
@@ -387,129 +652,24 @@ ipcMain.handle('launcher-open-lms', (event, { account, password } = {}) => {
 
           function hideCanvasBanner() {
             try {
-              // 정확한 컨테이너 제거
               document.querySelectorAll('.ic-flash-warning.flash-message-container.unsupported_browser').forEach(el => el.remove());
-              // 혹시 닫기 버튼만 있는 경우 자동 클릭
               document.querySelectorAll('.ic-flash-warning .close_link, .ic-flash-warning .Button--icon-action, .ic-flash-warning .icon-x').forEach(btn => { try { btn.click(); } catch(_){} });
             } catch (_) {}
           }
           hideCanvasBanner();
-          // 초기 로드 후 잠깐 반복해서 생성 차단
           let i = 0; 
           const timer = setInterval(() => { hideCanvasBanner(); if (++i > 50) clearInterval(timer); }, 100);
         })();`);
       } catch (_) {}
     }
-  });
 
-  // LMS 도메인에 Pretendard 폰트 적용
-  child.webContents.on('dom-ready', async () => {
-    const url = child.webContents.getURL();
-    if (/mylms\.korea\.ac\.kr/.test(url)) {
+    // LMS 도메인에 Pretendard 폰트 적용 (복구)
+    if (/mylms\.korea\.ac\.kr|lms\.korea\.ac\.kr/.test(url)) {
       try {
         await child.webContents.insertCSS(`
           @import url('https://cdn.jsdelivr.net/gh/orioncactus/pretendard/dist/web/static/pretendard.css');
           html, body, * { font-family: 'Pretendard', -apple-system, BlinkMacSystemFont, 'Segoe UI', Roboto, 'Apple SD Gothic Neo', Inter, system-ui, sans-serif !important; }
         `);
-      } catch (_) {}
-      // 세션 만료 알림만 주입 (헤더 없이)
-      try {
-        await child.webContents.insertCSS(`
-          .ku-session-toast { 
-            position: fixed; 
-            top: 20px; 
-            right: 20px; 
-            background: #e31b23; 
-            color: #fff; 
-            padding: 15px 20px; 
-            border-radius: 10px; 
-            z-index: 999999; 
-            box-shadow: rgba(0,0,0,0.3) 0 8px 20px; 
-            font-size: 14px; 
-            font-weight: 600;
-            max-width: 300px;
-            opacity: 0;
-            transform: translateX(100%);
-            transition: all 0.3s ease;
-          }
-          .ku-session-toast.show {
-            opacity: 1;
-            transform: translateX(0);
-          }
-          .ku-session-toast.warning {
-            background: #ffc107;
-            color: #000;
-          }
-          .ku-session-toast.error {
-            background: #dc3545;
-          }
-        `);
-        
-        await child.webContents.executeJavaScript(`(function(){
-          if (window.__kuSessionNotificationInjected) return; 
-          window.__kuSessionNotificationInjected = true;
-          
-          function showToast(msg, type = 'warning') {
-            const toast = document.createElement('div');
-            toast.className = 'ku-session-toast ' + type;
-            toast.textContent = msg;
-            document.documentElement.appendChild(toast);
-            
-            // 애니메이션으로 표시
-            setTimeout(() => toast.classList.add('show'), 100);
-            
-            // 5초 후 제거
-            setTimeout(() => {
-              toast.classList.remove('show');
-              setTimeout(() => toast.remove(), 300);
-            }, 5000);
-          }
-
-          const totalMs = 60*60*1000; // 1시간
-          const start = Date.now();
-          let alerted10 = false, alerted5 = false, alerted1 = false;
-          
-          function tick() {
-            const elapsed = Date.now() - start;
-            const remain = Math.max(0, totalMs - elapsed);
-            const remainMin = Math.ceil(remain / 60000);
-            
-            if (!alerted10 && remainMin <= 10 && remain > 0) {
-              alerted10 = true;
-              showToast('세션이 10분 후 만료됩니다. 진행 중인 작업을 저장하세요.', 'warning');
-            }
-            if (!alerted5 && remainMin <= 5 && remain > 0) {
-              alerted5 = true;
-              showToast('세션이 5분 후 만료됩니다. 작업을 완료하세요.', 'warning');
-            }
-            if (!alerted1 && remainMin <= 1 && remain > 0) {
-              alerted1 = true;
-              showToast('세션이 1분 후 만료됩니다!', 'error');
-            }
-            if (remain > 0) {
-              window.__kuSessionTimer = setTimeout(tick, 1000);
-            } else {
-              showToast('세션이 만료되었습니다. 재로그인이 필요할 수 있습니다.', 'error');
-            }
-          }
-          
-          tick();
-        })();`);
-      } catch (_) {}
-    }
-  });
-
-  // in-page 내비게이션에서도 폰트 유지 주입
-  child.webContents.on('did-navigate-in-page', async (_e, url) => {
-    if (/mylms\.korea\.ac\.kr/.test(url)) {
-      try {
-        await child.webContents.insertCSS(`
-          @import url('https://cdn.jsdelivr.net/gh/orioncactus/pretendard/dist/web/static/pretendard.css');
-          html, body, * { font-family: 'Pretendard', -apple-system, BlinkMacSystemFont, 'Segoe UI', Roboto, 'Apple SD Gothic Neo', Inter, system-ui, sans-serif !important; }
-        `);
-      } catch (_) {}
-      try {
-        await child.webContents.executeJavaScript(`(function(){ if(!document.getElementById('ku-helper-bar')){ window.__kuSessionBarInjected = false; } })();`);
       } catch (_) {}
     }
   });
@@ -517,7 +677,6 @@ ipcMain.handle('launcher-open-lms', (event, { account, password } = {}) => {
   // 페이지 로드 완료 후에도 자동 로그인 시도
   child.webContents.on('did-finish-load', async (_e) => {
     const url = child.webContents.getURL(); // 메인 프레임 기준 URL
-    // PDF/구글뷰어/데이터/블롭 미리보기는 간섭하지 않음
     if (isPdfLikeUrl(url)) return;
     if ((/sso\.korea\.ac\.kr/.test(url)) || (/mylms\.korea\.ac\.kr|lms\.korea\.ac\.kr/.test(url) && /(login|Login|signin|auth)/i.test(url))) {
       console.log('LMS 페이지 완전 로드 완료, 자동 로그인 재시도');
@@ -527,11 +686,20 @@ ipcMain.handle('launcher-open-lms', (event, { account, password } = {}) => {
 
   child.webContents.on('did-navigate-in-page', async (_e, url, isMainFrame) => {
     if (!isMainFrame) return; // 서브프레임은 무시
-    // PDF/구글뷰어/데이터/블롭 미리보기는 간섭하지 않음
     if (isPdfLikeUrl(url)) return;
+
+    // LMS 도메인에 Pretendard 폰트 적용 (in-page 이동 시에도 유지)
+    if (/mylms\.korea\.ac\.kr|lms\.korea\.ac\.kr/.test(url)) {
+      try {
+        await child.webContents.insertCSS(`
+          @import url('https://cdn.jsdelivr.net/gh/orioncactus/pretendard/dist/web/static/pretendard.css');
+          html, body, * { font-family: 'Pretendard', -apple-system, BlinkMacSystemFont, 'Segoe UI', Roboto, 'Apple SD Gothic Neo', Inter, system-ui, sans-serif !important; }
+        `);
+      } catch (_) {}
+    }
+
     if ((/sso\.korea\.ac\.kr/.test(url)) || (/mylms\.korea\.ac\.kr|lms\.korea\.ac\.kr/.test(url) && /(login|Login|signin|auth)/i.test(url))) {
       setTimeout(() => { tryLMSAutoLogin(); }, 200);
-      // 네비게이션 시에도 경고 배너 제거 재시도
       try {
         await child.webContents.executeJavaScript(`(function(){
           function hideCanvasBanner() {
@@ -549,7 +717,6 @@ ipcMain.handle('launcher-open-lms', (event, { account, password } = {}) => {
 
   child.webContents.on('did-redirect-navigation', (_e, url, _isInPlace, isMainFrame) => {
     if (!isMainFrame) return; // 서브프레임은 무시
-    // PDF/구글뷰어/데이터/블롭 미리보기는 간섭하지 않음
     if (isPdfLikeUrl(url)) return;
     if ((/sso\.korea\.ac\.kr/.test(url)) || (/mylms\.korea\.ac\.kr|lms\.korea\.ac\.kr/.test(url) && /(login|Login|signin|auth)/i.test(url))) {
       setTimeout(() => { tryLMSAutoLogin(); }, 200);
@@ -559,12 +726,20 @@ ipcMain.handle('launcher-open-lms', (event, { account, password } = {}) => {
   // 네트워크 에러/빈 페이지 방어 재시도 (PDF/뷰어는 예외)
   child.webContents.on('did-fail-load', (_e, errorCode, errorDesc, validatedURL, isMainFrame) => {
     if (!isMainFrame) return; // 서브프레임 실패는 무시
-    try {
-      if (validatedURL && isPdfLikeUrl(validatedURL)) return;
-    } catch(_) {}
+    try { if (validatedURL && isPdfLikeUrl(validatedURL)) return; } catch(_) {}
     child.loadURL(lmsLoginUrl);
   });
 });
+
+// 글로벌 단축키 등록 제거: 읽음 처리 기능 롤백
+// (기존 등록이 있었다면 해제)
+try {
+  const { globalShortcut } = require('electron');
+  app.whenReady().then(() => {
+    try { globalShortcut.unregister('CommandOrControl+Shift+A'); } catch(_) {}
+    try { globalShortcut.unregister('CommandOrControl+Shift+R'); } catch(_) {}
+  });
+} catch (_) {}
 
 // 시스템 테마 감지
 ipcMain.handle('get-system-theme', () => {
@@ -628,6 +803,68 @@ ipcMain.handle('migrate-from-kupid-config', async () => {
     return null;
   }
 });
+
+// 알림 체크 시작
+ipcMain.handle('start-notification-checks', async () => {
+  try {
+    startNotificationChecks();
+    return { success: true };
+  } catch (error) {
+    return { success: false, error: error.message };
+  }
+});
+
+// 알림 체크 중지
+ipcMain.handle('stop-notification-checks', async () => {
+  try {
+    stopNotificationChecks();
+    return { success: true };
+  } catch (error) {
+    return { success: false, error: error.message };
+  }
+});
+
+// 새 메시지 체크 (수동)
+ipcMain.handle('check-for-new-messages', async () => {
+  try {
+    await checkForNewMessages();
+    return { success: true };
+  } catch (error) {
+    return { success: false, error: error.message };
+  }
+});
+
+// 과제 마감일 체크 (수동)
+ipcMain.handle('check-assignment-deadlines', async () => {
+  try {
+    await checkAssignmentDeadlines();
+    return { success: true };
+  } catch (error) {
+    return { success: false, error: error.message };
+  }
+});
+
+// 테스트 알림
+ipcMain.handle('test-notification', async (event, type) => {
+  try {
+    if (type === 'message') {
+      showNotification(
+        '테스트 메시지 알림',
+        '새 메시지가 도착했습니다. (테스트)',
+        path.join(__dirname, 'image/logo.png')
+      );
+    } else if (type === 'assignment') {
+      showNotification(
+        '테스트 과제 알림',
+        '과제 마감이 1시간 남았습니다. (테스트)',
+        path.join(__dirname, 'image/logo.png')
+      );
+    }
+    return { success: true };
+  } catch (error) {
+    return { success: false, error: error.message };
+  }
+});
 }); // end of app.on('ready')
 
 // 앱 실행 중 최초 1회만 로딩 화면을 보여주기 위한 플래그
@@ -667,6 +904,11 @@ function createWindow() {
   setTimeout(() => {
     setupAutoUpdater();
   }, 3000); // 3초 후 업데이트 확인
+  
+  // 알림 체크 시작 (앱이 완전히 로드된 후)
+  setTimeout(() => {
+    startNotificationChecks();
+  }, 5000); // 5초 후 알림 체크 시작
 }
 
 app.whenReady().then(() => {
@@ -678,7 +920,13 @@ app.whenReady().then(() => {
 });
 
 app.on('window-all-closed', () => {
+  stopNotificationChecks();
   if (process.platform !== 'darwin') app.quit();
+});
+
+// 앱 종료 전 정리
+app.on('before-quit', () => {
+  stopNotificationChecks();
 });
 
 

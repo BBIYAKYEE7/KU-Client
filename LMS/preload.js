@@ -17,5 +17,16 @@ contextBridge.exposeInMainWorld('electronAPI', {
   // 업데이트 관리
   downloadUpdate: (downloadUrl, fileName) => ipcRenderer.invoke('download-update', downloadUrl, fileName),
   closeUpdateWindow: () => ipcRenderer.invoke('close-update-window'),
-  checkUpdatesManual: () => ipcRenderer.invoke('check-updates-manual')
+  checkUpdatesManual: () => ipcRenderer.invoke('check-updates-manual'),
+
+  // LMS 메시지함 읽음 처리
+  markAllMessagesRead: () => ipcRenderer.invoke('lms-mark-all-messages-read'),
+  markSelectedMessagesRead: () => ipcRenderer.invoke('lms-mark-selected-messages-read'),
+  
+  // 알림 관리
+  startNotificationChecks: () => ipcRenderer.invoke('start-notification-checks'),
+  stopNotificationChecks: () => ipcRenderer.invoke('stop-notification-checks'),
+  checkForNewMessages: () => ipcRenderer.invoke('check-for-new-messages'),
+  checkAssignmentDeadlines: () => ipcRenderer.invoke('check-assignment-deadlines'),
+  testNotification: (type) => ipcRenderer.invoke('test-notification', type)
 });

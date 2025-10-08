@@ -174,16 +174,15 @@ document.addEventListener('DOMContentLoaded', () => {
     setTimeout(() => portal.classList.remove('clicked'), 180);
     if (window.launcher && window.launcher.openPortal) {
       const account = localStorage.getItem('kupid-account') || '';
-      console.log('포털 버튼 클릭, 저장된 계정:', account);
+      // 민감정보/계정 식별자 로그 축소
       
       let password = '';
       if (account && window.launcher.loadCredentials) {
-        console.log('자격 증명 로드 시도:', 'kupid:' + account);
+        // 자격 증명 로드 시도 로그 제거
         try {
           // 포털/LMS 공통 비밀번호로 통합 저장
           password = await window.launcher.loadCredentials({ account: 'kupid:' + account }) || '';
-          console.log('로드된 비밀번호 길이:', password ? password.length : 0);
-          console.log('로드된 비밀번호 존재:', !!password);
+          // 비밀번호 상태 로그 제거
         } catch (error) {
           console.error('자격 증명 로드 오류:', error);
         }
@@ -191,7 +190,7 @@ document.addEventListener('DOMContentLoaded', () => {
         console.log('계정이 없거나 loadCredentials 함수가 없음');
       }
       
-      console.log('포털 열기 시도:', { account, hasPassword: !!password });
+      // 포털 열기 시도 로그 제거
       window.launcher.openPortal({ account, password });
     }
   });
@@ -202,38 +201,33 @@ document.addEventListener('DOMContentLoaded', () => {
     setTimeout(() => lms.classList.remove('clicked'), 180);
     if (window.launcher && window.launcher.openLMS) {
       const account = localStorage.getItem('kupid-account') || '';
-      console.log('LMS 버튼 클릭, 저장된 계정:', account);
+      // 민감정보/계정 식별자 로그 축소
       
       let password = '';
       if (account && window.launcher.loadCredentials) {
-        console.log('LMS 자격 증명 로드 시도:', 'kupid:' + account);
+        // 자격 증명 로드 시도 로그 제거
         try {
           // 포털/LMS 공통 비밀번호로 통합 저장 (동일한 자격 증명 사용)
           password = await window.launcher.loadCredentials({ account: 'kupid:' + account }) || '';
-          console.log('LMS 로드된 비밀번호 길이:', password ? password.length : 0);
-          console.log('LMS 로드된 비밀번호 존재:', !!password);
-          console.log('LMS 로드된 비밀번호 값:', password ? '[HIDDEN]' : null);
+          // 비밀번호 상태 로그 제거
         } catch (error) {
           console.error('LMS 자격 증명 로드 오류:', error);
         }
       } else {
-        console.log('LMS 계정이 없거나 loadCredentials 함수가 없음');
-        console.log('LMS 계정 존재:', !!account);
-        console.log('LMS loadCredentials 함수 존재:', !!window.launcher.loadCredentials);
+        // 상세 로그 제거
       }
       
-      console.log('LMS 열기 시도:', { account, hasPassword: !!password });
-      console.log('LMS 전달할 자격 증명:', { account, password: password ? '[HIDDEN]' : null });
+      // 열기/전달 로그 제거
       
       // 자격 증명이 없으면 포털과 동일한 자격 증명을 사용
       if (!account || !password) {
-        console.log('LMS 자격 증명이 없어서 포털과 동일한 자격 증명 사용');
+        // 상세 안내 로그 제거
         // 포털에서 사용한 자격 증명을 다시 로드
         const portalAccount = localStorage.getItem('kupid-account') || '';
         if (portalAccount && window.launcher.loadCredentials) {
           try {
             const portalPassword = await window.launcher.loadCredentials({ account: 'kupid:' + portalAccount }) || '';
-            console.log('LMS 포털 자격 증명 재로드:', { account: portalAccount, hasPassword: !!portalPassword });
+            // 재로드 상태 로그 제거
             window.launcher.openLMS({ account: portalAccount, password: portalPassword });
             return;
           } catch (error) {
@@ -271,14 +265,14 @@ document.addEventListener('DOMContentLoaded', () => {
   (async () => {
     try {
       const lastAccount = localStorage.getItem('kupid-account') || '';
-      console.log('저장된 계정 확인:', lastAccount);
+      // 저장된 계정 상태 로그 제거
       if (setupAccount) setupAccount.value = lastAccount;
       const account = lastAccount;
       let hasAny = false;
       if (account) {
-        console.log('자격 증명 로드 시도:', 'kupid:' + account);
+        // 자격 증명 로드 시도 로그 제거
         const common = await loadLogin('kupid:' + account);
-        console.log('로드된 자격 증명:', !!common);
+        // 로드 결과 로그 제거
         hasAny = !!common;
       }
       // 로딩 UI가 사라진 뒤에 모달을 표시
@@ -291,16 +285,16 @@ document.addEventListener('DOMContentLoaded', () => {
         // 자격 증명이 없으면 KUPID 설정에서 자동 마이그레이션 시도
         try {
           if (window.launcher && window.launcher.migrateFromKupidConfig) {
-            console.log('KUPID 설정 마이그레이션 시도');
+            // 마이그레이션 시도 로그 제거
             const migrated = await window.launcher.migrateFromKupidConfig();
             if (migrated && migrated.account && migrated.password) {
-              console.log('마이그레이션 성공, 계정/비밀번호 저장 진행');
+              // 성공 로그 제거
               localStorage.setItem('kupid-account', migrated.account);
               await saveLogin('kupid:' + migrated.account, migrated.password);
               hasAny = true;
               if (setupAccount) setupAccount.value = migrated.account;
             } else {
-              console.log('마이그레이션 결과가 없거나 불완전');
+              // 실패/없음 로그 제거
             }
           }
         } catch (e) {
@@ -309,7 +303,7 @@ document.addEventListener('DOMContentLoaded', () => {
 
         // 자격 증명이 여전히 없으면 강제로 모달 표시
         if (!hasAny) {
-          console.log('자격 증명이 없어서 설정 모달을 강제로 표시합니다');
+          // 강제 표시 로그 제거
           const params = new URLSearchParams(window.location.search);
           const shouldSkip = params.get('skipBoot') === '1';
           if (shouldSkip) {
@@ -351,7 +345,7 @@ document.addEventListener('DOMContentLoaded', () => {
   setupSave?.addEventListener('click', async () => {
     const account = (setupAccount?.value || '').trim();
     const portalPw = setupPortalPass?.value || '';
-    console.log('자격 증명 저장 시도:', { account, hasPassword: !!portalPw });
+    // 저장 시도 로그 제거
     
     if (!account) {
       alert('학번을 입력하세요.');
@@ -359,29 +353,21 @@ document.addEventListener('DOMContentLoaded', () => {
     }
     
     localStorage.setItem('kupid-account', account);
-    console.log('계정 저장 완료:', account);
+    // 계정 저장 로그 제거
     
     // 공통 비밀번호로 통합 저장 (포털/LMS 동일 자격 증명)
     const commonPw = portalPw;
     if (commonPw) {
-      console.log('비밀번호 저장 시도:', 'kupid:' + account);
+      // 비밀번호 저장 시도 로그 제거
       try {
         const result = await saveLogin('kupid:' + account, commonPw);
-        console.log('비밀번호 저장 결과:', result);
+        // 저장 결과 로그 제거
         
         // 저장 후 즉시 로드 테스트
         setTimeout(async () => {
           try {
             const testLoad = await loadLogin('kupid:' + account);
-            console.log('저장 후 로드 테스트:', { 
-              hasPassword: !!testLoad, 
-              passwordLength: testLoad ? testLoad.length : 0 
-            });
-            if (testLoad) {
-              console.log('자격 증명 저장 및 로드 성공!');
-            } else {
-              console.error('자격 증명 저장 후 로드 실패!');
-            }
+            // 저장 후 로드 테스트 상세 로그 제거
           } catch (error) {
             console.error('저장 후 로드 테스트 오류:', error);
           }

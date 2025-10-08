@@ -1,4 +1,4 @@
-const { app, BrowserWindow, ipcMain, dialog } = require('electron');
+const { app, BrowserWindow, ipcMain, dialog, Notification } = require('electron');
 const path = require('path');
 const Store = require('electron-store');
 const fs = require('fs');
@@ -10,6 +10,10 @@ const store = new Store();
 
 let mainWindow;
 let updateWindow;
+let messageCheckInterval;
+let assignmentCheckInterval;
+let lastMessageCount = 0;
+let lastAssignmentData = null;
 
 // 최초 실행 여부 확인
 function isFirstRun() {
@@ -19,6 +23,244 @@ function isFirstRun() {
 // 최초 실행 완료 표시
 function markFirstRunComplete() {
   store.set('hasRunBefore', true);
+}
+
+// 데스크탑 알림 표시 함수
+function showNotification(title, body, icon = null) {
+  if (Notification.isSupported()) {
+    const notification = new Notification({
+      title: title,
+      body: body,
+      icon: icon || path.join(__dirname, 'images/icon.png'),
+      sound: true,
+      urgency: 'normal'
+    });
+    
+    notification.on('click', () => {
+      if (mainWindow) {
+        mainWindow.show();
+        mainWindow.focus();
+      }
+    });
+    
+    notification.show();
+  }
+}
+
+// 메시지 수신 체크 함수
+async function checkForNewMessages() {
+  if (!mainWindow || !mainWindow.webContents) {
+    return;
+  }
+
+  try {
+    const result = await mainWindow.webContents.executeJavaScript(`
+      (async () => {
+        try {
+          // 메시지함 페이지로 이동
+          const currentUrl = window.location.href;
+          if (!currentUrl.includes('conversations')) {
+            // 메시지함 페이지로 이동
+            window.location.href = 'https://mylms.korea.ac.kr/conversations#filter=type=inbox';
+            return { success: false, message: '메시지함 페이지로 이동 중' };
+          }
+          
+          // 페이지 로딩 대기
+          await new Promise(resolve => setTimeout(resolve, 2000));
+          
+          // 읽지 않은 메시지 수 확인
+          const unreadElements = document.querySelectorAll('.unread, .new, [class*="unread"], [class*="new"]');
+          const unreadCount = unreadElements.length;
+          
+          // 또는 메시지 목록에서 읽지 않은 메시지 확인
+          const messageRows = document.querySelectorAll('tr, .message-item, .conversation-item');
+          let actualUnreadCount = 0;
+          
+          messageRows.forEach(row => {
+            if (row.textContent.includes('읽지 않음') || 
+                row.classList.contains('unread') || 
+                row.classList.contains('new') ||
+                row.querySelector('.unread, .new')) {
+              actualUnreadCount++;
+            }
+          });
+          
+          return { 
+            success: true, 
+            unreadCount: Math.max(unreadCount, actualUnreadCount),
+            currentUrl: window.location.href
+          };
+        } catch (error) {
+          return { success: false, message: error.message };
+        }
+      })();
+    `);
+    
+    if (result.success && result.unreadCount > lastMessageCount) {
+      const newMessageCount = result.unreadCount - lastMessageCount;
+      showNotification(
+        '새 메시지가 도착했습니다',
+        `${newMessageCount}개의 새 메시지가 있습니다.`,
+        path.join(__dirname, 'images/icon.png')
+      );
+    }
+    
+    lastMessageCount = result.unreadCount || 0;
+  } catch (error) {
+    console.error('메시지 체크 중 오류:', error);
+  }
+}
+
+// 과제 마감일 체크 함수
+async function checkAssignmentDeadlines() {
+  if (!mainWindow || !mainWindow.webContents) {
+    return;
+  }
+
+  try {
+    const result = await mainWindow.webContents.executeJavaScript(`
+      (async () => {
+        try {
+          // 캘린더 페이지로 이동
+          const currentUrl = window.location.href;
+          if (!currentUrl.includes('calendar')) {
+            window.location.href = 'https://mylms.korea.ac.kr/calendar';
+            return { success: false, message: '캘린더 페이지로 이동 중' };
+          }
+          
+          // 페이지 로딩 대기
+          await new Promise(resolve => setTimeout(resolve, 2000));
+          
+          // 과제 정보 수집
+          const assignments = [];
+          const now = new Date();
+          
+          // 캘린더 이벤트에서 과제 정보 추출
+          const events = document.querySelectorAll('.fc-event, .event, .assignment, [class*="assignment"]');
+          
+          events.forEach(event => {
+            const title = event.textContent || event.title || '';
+            const timeElement = event.querySelector('.time, .date, [class*="time"], [class*="date"]');
+            const timeText = timeElement ? timeElement.textContent : '';
+            
+            if (title && (title.includes('과제') || title.includes('Assignment') || title.includes('제출'))) {
+              // 시간 파싱 시도
+              const deadline = parseDeadline(timeText);
+              if (deadline) {
+                assignments.push({
+                  title: title.trim(),
+                  deadline: deadline,
+                  timeText: timeText
+                });
+              }
+            }
+          });
+          
+          // 또는 다른 방식으로 과제 정보 수집
+          const assignmentElements = document.querySelectorAll('[class*="assignment"], [id*="assignment"]');
+          assignmentElements.forEach(element => {
+            const title = element.textContent || '';
+            if (title.includes('과제') || title.includes('Assignment')) {
+              const deadline = parseDeadline(title);
+              if (deadline) {
+                assignments.push({
+                  title: title.trim(),
+                  deadline: deadline,
+                  timeText: title
+                });
+              }
+            }
+          });
+          
+          function parseDeadline(timeText) {
+            if (!timeText) return null;
+            
+            // 다양한 시간 형식 파싱
+            const patterns = [
+              /(\\d{4})[\\-\\/](\\d{1,2})[\\-\\/](\\d{1,2})\\s+(\\d{1,2}):(\\d{2})/,
+              /(\\d{1,2})[\\-\\/](\\d{1,2})[\\-\\/](\\d{4})\\s+(\\d{1,2}):(\\d{2})/,
+              /(\\d{1,2})\\/(\\d{1,2})\\/(\\d{4})\\s+(\\d{1,2}):(\\d{2})/
+            ];
+            
+            for (const pattern of patterns) {
+              const match = timeText.match(pattern);
+              if (match) {
+                const [, year, month, day, hour, minute] = match;
+                return new Date(year, month - 1, day, hour, minute);
+              }
+            }
+            
+            return null;
+          }
+          
+          return { 
+            success: true, 
+            assignments: assignments,
+            currentUrl: window.location.href
+          };
+        } catch (error) {
+          return { success: false, message: error.message };
+        }
+      })();
+    `);
+    
+    if (result.success && result.assignments) {
+      const now = new Date();
+      const notificationTimes = [60, 30, 10, 5, 1]; // 분 단위
+      
+      result.assignments.forEach(assignment => {
+        const timeDiff = assignment.deadline - now;
+        const minutesUntilDeadline = Math.floor(timeDiff / (1000 * 60));
+        
+        // 알림 시간 체크
+        notificationTimes.forEach(notificationTime => {
+          if (minutesUntilDeadline <= notificationTime && minutesUntilDeadline > 0) {
+            // 이전에 알림을 보냈는지 확인
+            const notificationKey = \`\${assignment.title}_\${notificationTime}\`;
+            if (!lastAssignmentData || !lastAssignmentData[notificationKey]) {
+              showNotification(
+                '과제 마감 알림',
+                \`"\${assignment.title}" 과제가 \${notificationTime}분 후 마감됩니다.\`,
+                path.join(__dirname, 'images/icon.png')
+              );
+              
+              // 알림 보낸 기록 저장
+              if (!lastAssignmentData) lastAssignmentData = {};
+              lastAssignmentData[notificationKey] = true;
+            }
+          }
+        });
+      });
+    }
+  } catch (error) {
+    console.error('과제 마감일 체크 중 오류:', error);
+  }
+}
+
+// 알림 체크 시작
+function startNotificationChecks() {
+  // 메시지 체크 (5분마다)
+  messageCheckInterval = setInterval(checkForNewMessages, 5 * 60 * 1000);
+  
+  // 과제 마감일 체크 (1분마다)
+  assignmentCheckInterval = setInterval(checkAssignmentDeadlines, 1 * 60 * 1000);
+  
+  console.log('알림 체크가 시작되었습니다.');
+}
+
+// 알림 체크 중지
+function stopNotificationChecks() {
+  if (messageCheckInterval) {
+    clearInterval(messageCheckInterval);
+    messageCheckInterval = null;
+  }
+  
+  if (assignmentCheckInterval) {
+    clearInterval(assignmentCheckInterval);
+    assignmentCheckInterval = null;
+  }
+  
+  console.log('알림 체크가 중지되었습니다.');
 }
 
 // 로그인 설정 확인 및 페이지 로드 함수
@@ -255,13 +497,36 @@ function createWindow() {
     setTimeout(() => {
       checkForUpdates();
     }, 3000);
+    
+    // 알림 체크 시작 (앱 시작 후 10초 뒤)
+    setTimeout(() => {
+      startNotificationChecks();
+    }, 10000);
   });
 
   // 개발자 도구 (디버깅용)
   mainWindow.webContents.openDevTools();
 
+  // 글로벌 단축키 등록 (Cmd/Ctrl+Shift+A: 전체 읽음, Cmd/Ctrl+Shift+R: 선택 읽음)
+  const { globalShortcut } = require('electron');
+  app.whenReady().then(() => {
+    try {
+      globalShortcut.register('CommandOrControl+Shift+A', () => {
+        mainWindow.webContents.send('ku-shortcut-lms-read-all');
+        mainWindow.webContents.executeJavaScript('window.electronAPI && window.electronAPI.markAllMessagesRead && window.electronAPI.markAllMessagesRead();');
+      });
+      globalShortcut.register('CommandOrControl+Shift+R', () => {
+        mainWindow.webContents.send('ku-shortcut-lms-read-selected');
+        mainWindow.webContents.executeJavaScript('window.electronAPI && window.electronAPI.markSelectedMessagesRead && window.electronAPI.markSelectedMessagesRead();');
+      });
+    } catch (e) {
+      console.error('글로벌 단축키 등록 실패:', e);
+    }
+  });
+
   // 윈도우가 닫힐 때
   mainWindow.on('closed', () => {
+    stopNotificationChecks();
     mainWindow = null;
   });
 }
@@ -553,6 +818,7 @@ app.whenReady().then(createWindow);
 
 // 모든 윈도우가 닫혔을 때 (macOS 제외)
 app.on('window-all-closed', () => {
+  stopNotificationChecks();
   if (process.platform !== 'darwin') {
     app.quit();
   }
@@ -563,6 +829,11 @@ app.on('activate', () => {
   if (BrowserWindow.getAllWindows().length === 0) {
     createWindow();
   }
+});
+
+// 앱 종료 전 정리
+app.on('before-quit', () => {
+  stopNotificationChecks();
 });
 
 // 자격 증명 저장
@@ -615,6 +886,158 @@ ipcMain.handle('navigate-to-lms', async (event, credentials) => {
   } catch (error) {
     return { success: false, error: error.message };
   }
+});
+
+// 메시지함 읽음 처리: 공통 유틸 (페이지에서 버튼/메뉴 탐색)
+async function executeInLmsPage(script) {
+  if (!mainWindow || !mainWindow.webContents) {
+    return { success: false, message: '메인 윈도우가 없습니다.' };
+  }
+  try {
+    const result = await mainWindow.webContents.executeJavaScript(`(async () => { ${script} })()`);
+    return result;
+  } catch (e) {
+    return { success: false, message: e.message };
+  }
+}
+
+function buildToast(message, type = 'success') {
+  return `(() => {
+    try {
+      const id = 'ku-lms-toast';
+      let toast = document.getElementById(id);
+      if (!toast) {
+        toast = document.createElement('div');
+        toast.id = id;
+        toast.style.position = 'fixed';
+        toast.style.zIndex = '2147483647';
+        toast.style.right = '20px';
+        toast.style.bottom = '20px';
+        toast.style.padding = '12px 16px';
+        toast.style.borderRadius = '8px';
+        toast.style.boxShadow = '0 8px 24px rgba(0,0,0,.2)';
+        toast.style.color = '#fff';
+        toast.style.fontFamily = 'system-ui,-apple-system,Segoe UI,Roboto,Helvetica,Arial,sans-serif';
+        document.body.appendChild(toast);
+      }
+      toast.style.background = '${type === 'success' ? '#2e7d32' : '#c62828'}';
+      toast.textContent = ${JSON.stringify(message)};
+      toast.style.opacity = '0';
+      toast.style.transition = 'opacity .2s ease-in-out';
+      requestAnimationFrame(() => { toast.style.opacity = '1'; });
+      setTimeout(() => { if (toast) { toast.style.opacity = '0'; setTimeout(()=>toast.remove(), 200); } }, 2000);
+    } catch (e) {}
+  })();`;
+}
+
+// 선택된 메시지 읽음 처리
+ipcMain.handle('lms-mark-selected-messages-read', async () => {
+  const script = `
+    try {
+      // 메시지함 페이지로 유추: URL 또는 제목에 '메시지' 포함 여부 체크 (가능한 범위)
+      // 버튼/메뉴 셀렉터 후보들
+      const candidates = [
+        'button[title*="읽음"]:not([disabled])',
+        'button:has(svg[aria-label*="읽음"])',
+        'button:has(span:contains("읽음"))',
+        'button:has(*:contains("읽음"))',
+        'a[role="button"]:has(span:contains("읽음"))',
+        'button[name*="read"]',
+        'button[class*="read"]',
+        'button[onclick*="read"]'
+      ];
+      
+      function findByText(root, text) {
+        const walker = document.createTreeWalker(root || document.body, NodeFilter.SHOW_ELEMENT, null);
+        while (walker.nextNode()) {
+          const el = walker.currentNode;
+          const t = (el.textContent || '').trim();
+          if (t && t.includes(text)) return el;
+        }
+        return null;
+      }
+      
+      function clickIfExists(el) { if (el) { el.click(); return true; } return false; }
+      
+      // 먼저 체크박스가 선택되어 있는지 확인, 없으면 상단의 '선택'류 버튼 시도
+      const anyChecked = !!document.querySelector('input[type="checkbox"]:checked');
+      if (!anyChecked) {
+        const selectAllBtn = findByText(document.body, '전체 선택') || findByText(document.body, '선택');
+        if (selectAllBtn) selectAllBtn.click();
+      }
+      
+      let target = null;
+      for (const sel of candidates) {
+        const el = document.querySelector(sel);
+        if (el) { target = el; break; }
+      }
+      if (!target) {
+        target = findByText(document.body, '읽음 처리') || findByText(document.body, '읽음');
+      }
+      
+      if (target) {
+        target.click();
+        ${buildToast('선택된 메시지를 읽음 처리했습니다.')}
+        return { success: true };
+      }
+      
+      ${buildToast('읽음 처리 버튼을 찾지 못했습니다.', 'error')}
+      return { success: false, message: '읽음 버튼을 찾지 못함' };
+    } catch (e) {
+      ${buildToast('오류로 실패했습니다.', 'error')}
+      return { success: false, message: e.message };
+    }
+  `;
+  return await executeInLmsPage(script);
+});
+
+// 전체 메시지 읽음 처리
+ipcMain.handle('lms-mark-all-messages-read', async () => {
+  const script = `
+    try {
+      function findByText(root, text) {
+        const walker = document.createTreeWalker(root || document.body, NodeFilter.SHOW_ELEMENT, null);
+        while (walker.nextNode()) {
+          const el = walker.currentNode;
+          const t = (el.textContent || '').trim();
+          if (t && t.includes(text)) return el;
+        }
+        return null;
+      }
+      
+      function clickIfExists(el) { if (el) { el.click(); return true; } return false; }
+      
+      // '전체 선택' 후 '읽음 처리' 시도
+      const selectAll = document.querySelector('input[type="checkbox"][name*="all"], input[type="checkbox"][id*="all"], th input[type="checkbox"]') || findByText(document.body, '전체 선택');
+      if (selectAll) { (selectAll.tagName === 'INPUT') ? (selectAll.checked = true, selectAll.dispatchEvent(new Event('change', { bubbles: true }))) : selectAll.click(); }
+      
+      const readAllCandidates = [
+        'button[title*="전체 읽음"]',
+        'button[name*="readAll"]',
+        'button[class*="readAll"]',
+        'button[onclick*="readAll"]'
+      ];
+      let target = null;
+      for (const sel of readAllCandidates) {
+        const el = document.querySelector(sel);
+        if (el) { target = el; break; }
+      }
+      if (!target) target = findByText(document.body, '전체 읽음') || findByText(document.body, '읽음 처리');
+      
+      if (target) {
+        target.click();
+        ${buildToast('전체 메시지를 읽음 처리했습니다.')}
+        return { success: true };
+      }
+      
+      ${buildToast('전체 읽음 처리 버튼을 찾지 못했습니다.', 'error')}
+      return { success: false, message: '전체 읽음 버튼을 찾지 못함' };
+    } catch (e) {
+      ${buildToast('오류로 실패했습니다.', 'error')}
+      return { success: false, message: e.message };
+    }
+  `;
+  return await executeInLmsPage(script);
 });
 
 // 세션 만료 체크
@@ -675,6 +1098,68 @@ ipcMain.handle('close-update-window', async () => {
 ipcMain.handle('check-updates-manual', async () => {
   try {
     checkForUpdates();
+    return { success: true };
+  } catch (error) {
+    return { success: false, error: error.message };
+  }
+});
+
+// 알림 체크 시작
+ipcMain.handle('start-notification-checks', async () => {
+  try {
+    startNotificationChecks();
+    return { success: true };
+  } catch (error) {
+    return { success: false, error: error.message };
+  }
+});
+
+// 알림 체크 중지
+ipcMain.handle('stop-notification-checks', async () => {
+  try {
+    stopNotificationChecks();
+    return { success: true };
+  } catch (error) {
+    return { success: false, error: error.message };
+  }
+});
+
+// 새 메시지 체크 (수동)
+ipcMain.handle('check-for-new-messages', async () => {
+  try {
+    await checkForNewMessages();
+    return { success: true };
+  } catch (error) {
+    return { success: false, error: error.message };
+  }
+});
+
+// 과제 마감일 체크 (수동)
+ipcMain.handle('check-assignment-deadlines', async () => {
+  try {
+    await checkAssignmentDeadlines();
+    return { success: true };
+  } catch (error) {
+    return { success: false, error: error.message };
+  }
+});
+
+// 테스트 알림
+ipcMain.handle('test-notification', async (event, type) => {
+  try {
+    if (type === 'message') {
+      showNotification(
+        '테스트 메시지 알림',
+        '새 메시지가 도착했습니다. (테스트)',
+        path.join(__dirname, 'images/icon.png')
+      );
+    } else if (type === 'assignment') {
+      showNotification(
+        '테스트 과제 알림',
+        '과제 마감이 1시간 남았습니다. (테스트)',
+        path.join(__dirname, 'images/icon.png')
+      );
+    }
     return { success: true };
   } catch (error) {
     return { success: false, error: error.message };
