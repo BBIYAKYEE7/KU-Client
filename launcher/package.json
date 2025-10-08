@@ -1,39 +1,30 @@
 {
   "name": "ku-client",
-  "version": "0.1.0",
+  "version": "0.2.2",
   "description": "KU Client - Korea University Unified Launcher (LMS & Portal)",
   "main": "main.js",
   "scripts": {
     "start": "electron .",
     "build": "electron-builder",
     "dist": "electron-builder --publish=never",
-    "build:win-x64": "electron-builder --win --x64",
-    "build:win-x86": "electron-builder --win --ia32",
-    "build:win-arm64": "electron-builder --win --arm64",
-    "build:mac-x64": "electron-builder --mac --x64",
-    "build:mac-arm64": "electron-builder --mac --arm64",
-    "build:linux-x64": "electron-builder --linux --x64",
-    "build:linux-arm64": "electron-builder --linux --arm64",
-    "build:win": "electron-builder --win --x64 --ia32 --arm64",
-    "build:mac": "electron-builder --mac --x64 --arm64",
+    "build:win": "electron-builder --win --x64 --arm64",
+    "build:mac": "electron-builder --mac --universal",
     "build:linux": "electron-builder --linux --x64 --arm64",
     "build:all": "npm run build:win && npm run build:mac && npm run build:linux"
   },
   "keywords": [],
   "author": "BBIYAKYEE7(김재윤)",
   "license": "MIT",
+  "homepage": "https://github.com/BBIYAKYEE7/Korea-University-Launcher",
   "type": "commonjs",
   "devDependencies": {
-    "electron": "^38.1.2",
+    "electron": "^38.2.2",
     "electron-builder": "^24.6.4"
-  },
-  "dependencies": {
-    "keytar": "^7.9.0"
   },
   "build": {
     "appId": "com.koreauniversity.launcher",
     "productName": "KU Client",
-    "artifactName": "KU-Client-${os}-${arch}.${ext}",
+    "artifactName": "KU-Client-${os}-universal.${ext}",
     "directories": {
       "output": "dist"
     },
@@ -52,7 +43,9 @@
       "target": [
         {
           "target": "dmg",
-          "arch": ["x64", "arm64"]
+          "arch": [
+            "universal"
+          ]
         }
       ]
     },
@@ -61,7 +54,7 @@
       "target": [
         {
           "target": "nsis",
-          "arch": ["x64", "ia32", "arm64"]
+          "arch": ["x64", "arm64"]
         }
       ]
     },
@@ -81,7 +74,9 @@
       "createDesktopShortcut": true,
       "createStartMenuShortcut": true,
       "shortcutName": "KU Client",
-      "installerLanguages": ["ko-KR"],
+      "installerLanguages": [
+        "ko-KR"
+      ],
       "language": "1042"
     }
   }

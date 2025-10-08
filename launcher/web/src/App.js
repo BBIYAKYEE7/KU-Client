@@ -14,45 +14,33 @@ async function fetchLatestAssets(platform) {
     const platformAssets = [];
     
     if (platform === 'windows') {
-      // Windows 에셋들 찾기
+      // Windows 에셋들 찾기 (유니버셜)
       assets.forEach(asset => {
         if (/windows|\.exe$/i.test(asset.name) && !/mac|linux/i.test(asset.name)) {
-          if (/x64|amd64/i.test(asset.name)) {
-            platformAssets.push({ name: 'Windows x64', url: asset.browser_download_url, filename: asset.name });
-          } else if (/x86|i386/i.test(asset.name)) {
-            platformAssets.push({ name: 'Windows x86', url: asset.browser_download_url, filename: asset.name });
-          } else if (/arm64/i.test(asset.name)) {
-            platformAssets.push({ name: 'Windows ARM64', url: asset.browser_download_url, filename: asset.name });
+          if (/universal/i.test(asset.name)) {
+            platformAssets.push({ name: 'Windows Universal', url: asset.browser_download_url, filename: asset.name });
           } else {
             platformAssets.push({ name: 'Windows', url: asset.browser_download_url, filename: asset.name });
           }
         }
       });
     } else if (platform === 'mac') {
-      // macOS 에셋들 찾기
+      // macOS 에셋들 찾기 (유니버셜)
       assets.forEach(asset => {
         if (/mac|\.dmg$|\.pkg$/i.test(asset.name) && !/windows|linux/i.test(asset.name)) {
-          if (/arm64|m1|m2|apple/i.test(asset.name)) {
-            platformAssets.push({ name: 'macOS Apple Silicon', url: asset.browser_download_url, filename: asset.name });
-          } else if (/intel|x86_64/i.test(asset.name)) {
-            platformAssets.push({ name: 'macOS Intel', url: asset.browser_download_url, filename: asset.name });
+          if (/universal/i.test(asset.name)) {
+            platformAssets.push({ name: 'macOS Universal', url: asset.browser_download_url, filename: asset.name });
           } else {
             platformAssets.push({ name: 'macOS', url: asset.browser_download_url, filename: asset.name });
           }
         }
       });
     } else if (platform === 'linux') {
-      // Linux 에셋들 찾기
+      // Linux 에셋들 찾기 (유니버셜)
       assets.forEach(asset => {
         if (/linux|\.AppImage$|\.deb$|\.rpm$/i.test(asset.name) && !/windows|mac/i.test(asset.name)) {
-          if (/x64|amd64/i.test(asset.name)) {
-            platformAssets.push({ name: 'Linux x64', url: asset.browser_download_url, filename: asset.name });
-          } else if (/x86|i386/i.test(asset.name)) {
-            platformAssets.push({ name: 'Linux x86', url: asset.browser_download_url, filename: asset.name });
-          } else if (/arm64|aarch64/i.test(asset.name)) {
-            platformAssets.push({ name: 'Linux ARM64', url: asset.browser_download_url, filename: asset.name });
-          } else if (/arm|armv7/i.test(asset.name)) {
-            platformAssets.push({ name: 'Linux ARM', url: asset.browser_download_url, filename: asset.name });
+          if (/universal/i.test(asset.name)) {
+            platformAssets.push({ name: 'Linux Universal', url: asset.browser_download_url, filename: asset.name });
           } else {
             platformAssets.push({ name: 'Linux', url: asset.browser_download_url, filename: asset.name });
           }

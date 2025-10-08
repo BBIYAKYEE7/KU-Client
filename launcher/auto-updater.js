@@ -1,5 +1,5 @@
 const https = require('https');
-const { app, dialog, shell } = require('electron');
+const { app, dialog, shell, BrowserWindow, ipcMain } = require('electron');
 const path = require('path');
 
 class AutoUpdater {
@@ -10,6 +10,40 @@ class AutoUpdater {
     this.githubApiUrl = `https://api.github.com/repos/${this.repoOwner}/${this.repoName}/releases/latest`;
     this.releaseUrl = 'https://github.com/BBIYAKYEE7/KU-Client/releases/latest';
     this.userSelectedArch = null; // 사용자가 선택한 아키텍처 (우선 적용)
+  }
+
+  // 간단한 Markdown → 평문 변환 (dialog에서 Markdown이 그대로 노출되는 문제 방지)
+  stripMarkdown(md = '') {
+    try {
+      let t = String(md);
+      // 코드 펜스 유지하되 백틱 제거
+      t = t.replace(/```[\s\S]*?```/g, (m) => '\n' + m.replace(/```/g, ''));
+      // 인라인 코드
+      t = t.replace(/`([^`]+)`/g, '$1');
+      // 이미지 제거
+      t = t.replace(/!\[[^\]]*\]\([^)]*\)/g, '');
+      // 링크: 텍스트 (URL)
+      t = t.replace(/\[([^\]]+)\]\(([^)]+)\)/g, '$1 ($2)');
+      // 헤더 기호 제거
+      t = t.replace(/^\s{0,3}#{1,6}\s+/gm, '');
+      // 볼드/이탤릭 제거
+      t = t.replace(/\*\*([^*]+)\*\*/g, '$1')
+           .replace(/\*([^*]+)\*/g, '$1')
+           .replace(/__([^_]+)__/g, '$1')
+           .replace(/_([^_]+)_/g, '$1');
+      // 리스트 기호 정리
+      t = t.replace(/^\s*[-*+]\s+/gm, '• ');
+      t = t.replace(/^\s*\d+\.\s+/gm, (m) => m.replace(/\d+\./, '• '));
+      // 인용문/수평선 제거
+      t = t.replace(/^>\s?/gm, '');
+      t = t.replace(/^(?:-{3,}|_{3,}|\*{3,})$/gm, '');
+      // 개행/공백 정리
+      t = t.replace(/\r/g, '');
+      t = t.replace(/\n{3,}/g, '\n\n');
+      return t.trim();
+    } catch (_) {
+      return String(md || '');
+    }
   }
 
   // GitHub API에서 최신 릴리즈 정보 가져오기
@@ -124,14 +158,14 @@ class AutoUpdater {
     return false; // 동일한 버전
   }
 
-  // 업데이트 다이얼로그 표시
+  // 업데이트 다이얼로그 표시 (기본 MessageBox + 간단한 마크다운 평문화)
   async showUpdateDialog(updateInfo) {
     const options = {
       type: 'info',
       title: '새로운 버전이 있습니다!',
       message: `KU Client v${updateInfo.version}이(가) 출시되었습니다.`,
-      detail: `현재 버전: v${this.currentVersion}\n최신 버전: v${updateInfo.version}\n\n${updateInfo.releaseNotes || '새로운 기능과 개선사항이 포함되었습니다.'}`,
-      buttons: ['업데이트 (아키텍처 선택)', '수동 다운로드', '나중에', '업데이트 확인 안함'],
+      detail: `현재 버전: v${this.currentVersion}\n최신 버전: v${updateInfo.version}\n\n요약: 새로운 기능과 개선 사항이 포함되었습니다.\n자세한 패치노트는 \"상세 보기\"에서 확인하세요.`,
+      buttons: ['업데이트 (아키텍처 선택)', '수동 다운로드', '나중에', '업데이트 확인 안함', '상세 보기'],
       defaultId: 0,
       cancelId: 2,
       icon: path.join(__dirname, 'image', 'logo(w).png')
@@ -152,7 +186,66 @@ class AutoUpdater {
       case 3: // 업데이트 확인 안함
         this.disableUpdateCheck();
         break;
+      case 4: // 상세 보기 (Markdown 전용 뷰어)
+        await this.showMarkdownModal(updateInfo);
+        // 상세 보기 닫힌 후, 다시 옵션 표시하여 흐름 유지
+        await this.showUpdateDialog(updateInfo);
+        break;
     }
+  }
+
+  // Markdown 상세 보기 모달 (내용 영역만 렌더)
+  async showMarkdownModal(updateInfo) {
+    const parent = BrowserWindow.getAllWindows()[0] || null;
+    const win = new BrowserWindow({
+      width: 780,
+      height: 680,
+      modal: !!parent,
+      parent,
+      title: `패치노트 v${updateInfo.version}`,
+      resizable: true,
+      minimizable: false,
+      maximizable: true,
+      webPreferences: { nodeIntegration: false, contextIsolation: true }
+    });
+
+    const md = String(updateInfo.releaseNotes || '새로운 기능과 개선사항이 포함되었습니다.');
+    const html = `<!doctype html>
+<html lang="ko">
+<head>
+  <meta charset="utf-8" />
+  <meta http-equiv="Content-Security-Policy" content="default-src 'self' https://cdn.jsdelivr.net; style-src 'self' 'unsafe-inline' https://cdn.jsdelivr.net; script-src 'self' 'unsafe-inline' https://cdn.jsdelivr.net; img-src * data:;" />
+  <title>패치노트</title>
+  <link rel="preconnect" href="https://cdn.jsdelivr.net" />
+  <script src="https://cdn.jsdelivr.net/npm/marked/marked.min.js"></script>
+  <style>
+    body { margin:0; background:#0b1220; color:#e5e7eb; font-family:-apple-system,BlinkMacSystemFont,'Segoe UI',Roboto,'Apple SD Gothic Neo',Inter,system-ui,sans-serif; }
+    header { padding:14px 18px; border-bottom:1px solid #1f2937; font-weight:700; }
+    .content { padding: 16px 20px; height: calc(100vh - 100px); overflow:auto; }
+    .md { max-width: 900px; }
+    .md h1,.md h2,.md h3{ color:#f9fafb; }
+    .md code { background:#111827; padding:2px 4px; border-radius:4px; }
+    .md pre { background:#0b0f19; padding:12px; border-radius:6px; overflow:auto; }
+    .md a { color:#60a5fa; text-decoration:none; }
+    .md ul { padding-left: 20px; }
+    footer { position:sticky; bottom:0; padding:10px 16px; border-top:1px solid #1f2937; background:#0b1220; display:flex; justify-content:flex-end; }
+    button { background:#2563eb; color:#fff; border:none; padding:8px 12px; border-radius:6px; cursor:pointer; font-weight:600; }
+  </style>
+</head>
+<body>
+  <header>Korea University Launcher v${updateInfo.version} 패치노트</header>
+  <div class="content"><div id="md" class="md"></div></div>
+  <footer><button id="closeBtn" autofocus>닫기</button></footer>
+  <script>
+    const raw = ${JSON.stringify(md)};
+    document.getElementById('md').innerHTML = window.marked.parse(raw);
+    document.getElementById('closeBtn').onclick = () => window.close();
+    window.addEventListener('keydown', (e) => { if (e.key === 'Escape' || (e.key.toLowerCase() === 'w' && (e.metaKey || e.ctrlKey))) window.close(); });
+  </script>
+</body>
+</html>`;
+
+    win.loadURL('data:text/html;charset=utf-8,' + encodeURIComponent(html));
   }
 
   // 아키텍처 선택 다이얼로그 + 가이드 제공 후 다운로드 진행
@@ -618,7 +711,7 @@ class AutoUpdater {
       console.error('설정 로드 중 오류:', error);
     }
 
-    // 30초 후 첫 번째 업데이트 확인
+    // 즉시 첫 번째 업데이트 확인
     setTimeout(async () => {
       const updateInfo = await this.checkForUpdates();
       if (updateInfo) {
@@ -630,7 +723,7 @@ class AutoUpdater {
           await this.showUpdateDialog(updateInfo);
         }
       }
-    }, 30000);
+    }, 1000); // 1초 후 즉시 확인
 
     // 이후 24시간마다 업데이트 확인
     setInterval(async () => {

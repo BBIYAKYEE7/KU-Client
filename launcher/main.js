@@ -1,7 +1,7 @@
 const { app, BrowserWindow, nativeTheme, ipcMain, Notification } = require('electron');
 const path = require('path');
 const fs = require('fs');
-const keytar = require('keytar');
+// const keytar = require('keytar'); // 유니버셜 빌드를 위해 임시 비활성화
 const AutoUpdater = require('./auto-updater');
 // 세션 상단바(빨간 줄) 사용 여부
 const ENABLE_SESSION_BAR = false;
@@ -9,6 +9,68 @@ const ENABLE_SESSION_BAR = false;
 // 자동 업데이트 관련 변수
 let autoUpdaterInstance = null;
 let autoUpdaterInitialized = false;
+
+// 버전 오버라이드 제거: 항상 package.json 버전 사용
+
+// ------------------------------
+// Secure local credential storage (AES-256-GCM, file-based)
+// ------------------------------
+const crypto = require('crypto');
+const { promises: fsp } = require('fs');
+
+function getUserDataPath() {
+  try { return app.getPath('userData'); } catch (_) { return path.join(process.cwd(), '.userData'); }
+}
+
+function getCredsFilePath() {
+  return path.join(getUserDataPath(), 'creds.json');
+}
+
+function getKeyFilePath() {
+  return path.join(getUserDataPath(), 'cred_key');
+}
+
+async function ensureKey() {
+  const keyFile = getKeyFilePath();
+  try {
+    const existing = await fsp.readFile(keyFile);
+    if (existing && existing.length === 32) return existing;
+  } catch (_) { /* no key */ }
+  await fsp.mkdir(getUserDataPath(), { recursive: true });
+  const key = crypto.randomBytes(32);
+  await fsp.writeFile(keyFile, key, { mode: 0o600 });
+  return key;
+}
+
+async function loadCredsMap() {
+  try {
+    const buf = await fsp.readFile(getCredsFilePath(), 'utf8');
+    return JSON.parse(buf || '{}');
+  } catch (_) { return {}; }
+}
+
+async function saveCredsMap(map) {
+  await fsp.mkdir(getUserDataPath(), { recursive: true });
+  await fsp.writeFile(getCredsFilePath(), JSON.stringify(map, null, 2), { mode: 0o600 });
+}
+
+function encryptWithKey(key, plaintext) {
+  const iv = crypto.randomBytes(12);
+  const cipher = crypto.createCipheriv('aes-256-gcm', key, iv);
+  const enc = Buffer.concat([cipher.update(Buffer.from(plaintext, 'utf8')), cipher.final()]);
+  const tag = cipher.getAuthTag();
+  return { iv: iv.toString('base64'), tag: tag.toString('base64'), data: enc.toString('base64') };
+}
+
+function decryptWithKey(key, payload) {
+  const iv = Buffer.from(payload.iv, 'base64');
+  const tag = Buffer.from(payload.tag, 'base64');
+  const data = Buffer.from(payload.data, 'base64');
+  const decipher = crypto.createDecipheriv('aes-256-gcm', key, iv);
+  decipher.setAuthTag(tag);
+  const dec = Buffer.concat([decipher.update(data), decipher.final()]);
+  return dec.toString('utf8');
+}
 
 // 알림 관련 변수
 let messageCheckInterval;
@@ -749,24 +811,41 @@ ipcMain.handle('get-system-theme', () => {
 // 자격 증명 저장/로드/삭제 (macOS Keychain 등 안전한 저장소 사용)
 const SERVICE_NAME = 'KUClient';
 
-ipcMain.handle('creds-save', async (event, { account, password }) => {
+// 유니버셜 빌드를 위해 keytar 기능 임시 비활성화
+ipcMain.handle('creds-save', async (_event, { account, password }) => {
   if (!account || typeof password !== 'string') {
     throw new Error('Invalid credentials');
   }
-  await keytar.setPassword(SERVICE_NAME, account, password);
+  const key = await ensureKey();
+  const enc = encryptWithKey(key, password);
+  const map = await loadCredsMap();
+  map[account] = enc;
+  await saveCredsMap(map);
   return true;
 });
 
-ipcMain.handle('creds-load', async (event, { account }) => {
+ipcMain.handle('creds-load', async (_event, { account }) => {
   if (!account) throw new Error('Account required');
-  const password = await keytar.getPassword(SERVICE_NAME, account);
-  return password || null;
+  const map = await loadCredsMap();
+  const payload = map[account];
+  if (!payload) return null;
+  const key = await ensureKey();
+  try {
+    return decryptWithKey(key, payload);
+  } catch (_) {
+    return null;
+  }
 });
 
-ipcMain.handle('creds-delete', async (event, { account }) => {
+ipcMain.handle('creds-delete', async (_event, { account }) => {
   if (!account) throw new Error('Account required');
-  const ok = await keytar.deletePassword(SERVICE_NAME, account);
-  return ok;
+  const map = await loadCredsMap();
+  if (map[account]) {
+    delete map[account];
+    await saveCredsMap(map);
+    return true;
+  }
+  return false;
 });
 
 // KUPID 앱의 로그인 설정(config.json)을 읽어와 마이그레이션 시도
@@ -900,10 +979,8 @@ function createWindow() {
     win.webContents.send('system-theme-changed', theme);
   });
 
-  // 자동 업데이트 시작 (앱이 완전히 로드된 후)
-  setTimeout(() => {
-    setupAutoUpdater();
-  }, 3000); // 3초 후 업데이트 확인
+  // 자동 업데이트 시작: 로딩 화면과 동시에 시작
+  setupAutoUpdater();
   
   // 알림 체크 시작 (앱이 완전히 로드된 후)
   setTimeout(() => {
