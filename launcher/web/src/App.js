@@ -123,7 +123,7 @@ function App() {
   
   async function handleLinuxClick(e) {
     e.preventDefault();
-    alert('Linux 지원은 현재 준비 중입니다. 곧 제공될 예정입니다.');
+    await showArchitectureSelector('linux');
   }
   
   async function showArchitectureSelector(platform) {
@@ -167,9 +167,9 @@ function App() {
     } else if (os === 'mac') {
       await showArchitectureSelector('mac');
     } else if (os === 'linux') {
-      alert('Linux 지원은 현재 준비 중입니다. 곧 제공될 예정입니다.');
+      await showArchitectureSelector('linux');
     } else {
-      alert('지원되지 않는 운영체제입니다. Windows, macOS 버전을 제공합니다. Linux 지원은 준비 중입니다.');
+      alert('지원되지 않는 운영체제입니다. Windows, macOS, Linux 버전을 제공합니다.');
     }
   }
 
@@ -220,7 +220,7 @@ function App() {
             </li>
             <li className="glass">
               <h3>크로스 플랫폼</h3>
-              <p>Windows, macOS에서 동일한 경험을 제공합니다. Linux 지원은 준비 중입니다.</p>
+              <p>Windows, macOS, Linux에서 동일한 경험을 제공합니다.</p>
             </li>
           </ul>
         </section>
@@ -233,19 +233,19 @@ function App() {
               <a className="card glass" href="#" onClick={handleMacClick} aria-label="macOS용 다운로드">
                 <div className="card-body">
                   <span className="os">macOS</span>
-                  <span className="hint">Apple Silicon / Intel</span>
+                  <span className="hint">Universal (Apple Silicon / Intel)</span>
                 </div>
               </a>
               <a className="card glass" href="#" onClick={handleWindowsClick} aria-label="Windows용 다운로드">
                 <div className="card-body">
                   <span className="os">Windows</span>
-                  <span className="hint">x64 / x86 / ARM64</span>
+                  <span className="hint">Universal (x64 / ARM64)</span>
                 </div>
               </a>
-              <a className="card glass disabled" href="#" aria-label="Linux용 다운로드 (준비중)">
+              <a className="card glass" href="#" onClick={handleLinuxClick} aria-label="Linux용 다운로드">
                 <div className="card-body">
                   <span className="os">Linux</span>
-                  <span className="hint">준비중</span>
+                  <span className="hint">Universal / DEB</span>
                 </div>
               </a>
             </div>
