@@ -134,12 +134,10 @@ async function checkForNewMessages() {
       const result = await lmsWindow.webContents.executeJavaScript(`
         (async () => {
           try {
-            // 메시지함 페이지로 이동
+            // 메시지함 페이지가 아닐 경우, 사용자 페이지를 변경하지 않고 스킵
             const currentUrl = window.location.href;
             if (!currentUrl.includes('conversations')) {
-              // 메시지함 페이지로 이동
-              window.location.href = 'https://mylms.korea.ac.kr/conversations#filter=type=inbox';
-              return { success: false, message: '메시지함 페이지로 이동 중' };
+              return { success: false, message: 'not on conversations page' };
             }
             
             // 페이지 로딩 대기
@@ -202,11 +200,10 @@ async function checkAssignmentDeadlines() {
       const result = await lmsWindow.webContents.executeJavaScript(`
         (async () => {
           try {
-            // 캘린더 페이지로 이동
+            // 캘린더 페이지가 아닐 경우, 사용자 페이지를 변경하지 않고 스킵
             const currentUrl = window.location.href;
             if (!currentUrl.includes('calendar')) {
-              window.location.href = 'https://mylms.korea.ac.kr/calendar';
-              return { success: false, message: '캘린더 페이지로 이동 중' };
+              return { success: false, message: 'not on calendar page' };
             }
             
             // 페이지 로딩 대기
