@@ -165,7 +165,7 @@ class AutoUpdater {
       title: '새로운 버전이 있습니다!',
       message: `KU Client v${updateInfo.version}이(가) 출시되었습니다.`,
       detail: `현재 버전: v${this.currentVersion}\n최신 버전: v${updateInfo.version}\n\n요약: 새로운 기능과 개선 사항이 포함되었습니다.\n자세한 패치노트는 \"상세 보기\"에서 확인하세요.`,
-      buttons: ['업데이트 (아키텍처 선택)', '수동 다운로드', '나중에', '상세 보기'],
+      buttons: ['지금 업데이트', '나중에', '상세 보기'],
       defaultId: 0,
       cancelId: 2,
       icon: path.join(__dirname, 'image', 'logo.png')
