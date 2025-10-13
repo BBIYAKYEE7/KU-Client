@@ -165,10 +165,10 @@ class AutoUpdater {
       title: '새로운 버전이 있습니다!',
       message: `KU Client v${updateInfo.version}이(가) 출시되었습니다.`,
       detail: `현재 버전: v${this.currentVersion}\n최신 버전: v${updateInfo.version}\n\n요약: 새로운 기능과 개선 사항이 포함되었습니다.\n자세한 패치노트는 \"상세 보기\"에서 확인하세요.`,
-      buttons: ['업데이트 (아키텍처 선택)', '수동 다운로드', '나중에', '업데이트 확인 안함', '상세 보기'],
+      buttons: ['업데이트 (아키텍처 선택)', '수동 다운로드', '나중에', '상세 보기'],
       defaultId: 0,
       cancelId: 2,
-      icon: path.join(__dirname, 'image', 'logo(w).png')
+      icon: path.join(__dirname, 'image', 'logo.png')
     };
 
     const result = await dialog.showMessageBox(options);
@@ -183,10 +183,7 @@ class AutoUpdater {
       case 2: // 나중에
         // 아무것도 하지 않음
         break;
-      case 3: // 업데이트 확인 안함
-        this.disableUpdateCheck();
-        break;
-      case 4: // 상세 보기 (Markdown 전용 뷰어)
+      case 3: // 상세 보기 (Markdown 전용 뷰어)
         await this.showMarkdownModal(updateInfo);
         // 상세 보기 닫힌 후, 다시 옵션 표시하여 흐름 유지
         await this.showUpdateDialog(updateInfo);
@@ -282,7 +279,7 @@ class AutoUpdater {
         buttons: archChoices.concat(['취소']),
         defaultId: defaultId,
         cancelId: archChoices.length,
-        icon: path.join(__dirname, 'image', 'logo(w).png')
+        icon: path.join(__dirname, 'image', 'logo.png')
       });
 
       if (sel.response === archChoices.length) {

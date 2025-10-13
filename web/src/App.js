@@ -75,6 +75,8 @@ function App() {
   const [isClosing, setIsClosing] = React.useState(false);
   const [modalAssets, setModalAssets] = React.useState([]);
   const [modalPlatform, setModalPlatform] = React.useState('');
+  const [showInstallGuide, setShowInstallGuide] = React.useState(false);
+  const [installGuidePlatform, setInstallGuidePlatform] = React.useState('');
   const [currentTheme, setCurrentTheme] = React.useState(storedTheme || 'dark');
   
   React.useEffect(() => {
@@ -113,17 +115,20 @@ function App() {
   }
   async function handleWindowsClick(e) {
     e.preventDefault();
-    await showArchitectureSelector('windows');
+    setInstallGuidePlatform('windows');
+    setShowInstallGuide(true);
   }
   
   async function handleMacClick(e) {
     e.preventDefault();
-    await showArchitectureSelector('mac');
+    setInstallGuidePlatform('mac');
+    setShowInstallGuide(true);
   }
   
   async function handleLinuxClick(e) {
     e.preventDefault();
-    await showArchitectureSelector('linux');
+    setInstallGuidePlatform('linux');
+    setShowInstallGuide(true);
   }
   
   async function showArchitectureSelector(platform) {
@@ -160,14 +165,21 @@ function App() {
     }, 300); // 애니메이션 지속 시간과 동일하게 설정
   }
 
+  function closeInstallGuide() {
+    setShowInstallGuide(false);
+  }
+
   async function handlePrimaryClick(e) {
     e.preventDefault();
     if (os === 'windows') {
-      await showArchitectureSelector('windows');
+      setInstallGuidePlatform('windows');
+      setShowInstallGuide(true);
     } else if (os === 'mac') {
-      await showArchitectureSelector('mac');
+      setInstallGuidePlatform('mac');
+      setShowInstallGuide(true);
     } else if (os === 'linux') {
-      await showArchitectureSelector('linux');
+      setInstallGuidePlatform('linux');
+      setShowInstallGuide(true);
     } else {
       alert('지원되지 않는 운영체제입니다. Windows, macOS, Linux 버전을 제공합니다.');
     }
@@ -180,6 +192,12 @@ function App() {
           <a className="brand" href="#top" aria-label="KUPID 홈">
             <img className="brand-logo-wide" src="/images/kulogo(r).png" alt="고려대로고" width="125" height="36"/>
           </a>
+          
+          <nav className="nav">
+            <a href="#features">기능</a>
+            <a href="#download">다운로드</a>
+            <a href="#faq">FAQ</a>
+          </nav>
           
           {/* 테마변경 버튼 */}
           <a className="btn" href="#" onClick={(e)=>{e.preventDefault();toggleTheme();}} aria-label="테마 전환">테마 전환</a>
@@ -253,11 +271,97 @@ function App() {
           </div>
         </section>
 
+        <section id="security" className="section section-alt" aria-labelledby="security-title">
+          <div className="container">
+            <h2 id="security-title">⚠️ 보안 경고 해결 방법</h2>
+            <p className="muted">코드 서명이 되어있지 않아 다운로드 시 보안 경고가 나타날 수 있습니다. 아래 방법을 따라 안전하게 설치하세요.</p>
+            
+            <div className="security-guide">
+              <div className="glass">
+                <h3>🪟 Windows</h3>
+                <div className="security-steps">
+                  <div className="step">
+                    <h4>1. SmartScreen 경고</h4>
+                    <p>다운로드 후 실행 시 "Windows에서 PC를 보호했습니다" 경고가 나타납니다.</p>
+                    <p><strong>해결법:</strong> "추가 정보" → "실행" 버튼을 클릭하세요.</p>
+                  </div>
+                  <div className="step">
+                    <h4>2. 바이러스 백신 경고</h4>
+                    <p>일부 백신 프로그램에서 위험한 파일로 인식할 수 있습니다.</p>
+                    <p><strong>해결법:</strong> 백신 프로그램에서 예외 처리하거나 일시적으로 비활성화하세요.</p>
+                  </div>
+                  <div className="step">
+                    <h4>3. 대안 방법</h4>
+                    <p>여전히 문제가 있다면:</p>
+                    <ul>
+                      <li>Windows Defender에서 실시간 보호를 일시적으로 끄기</li>
+                      <li>파일을 우클릭 → "속성" → "차단 해제" 체크</li>
+                      <li>관리자 권한으로 실행</li>
+                    </ul>
+                  </div>
+                </div>
+              </div>
+
+              <div className="glass">
+                <h3>🍎 macOS</h3>
+                <div className="security-steps">
+                  <div className="step">
+                    <h4>1. Gatekeeper 경고</h4>
+                    <p>"개발자를 확인할 수 없습니다" 경고가 나타납니다.</p>
+                    <p><strong>해결법:</strong> "확인" → 시스템 환경설정 → 보안 및 개인 정보 보호 → "확인 없이 열기"</p>
+                  </div>
+                  <div className="step">
+                    <h4>2. 터미널을 통한 설치</h4>
+                    <p>터미널에서 다음 명령어를 실행하세요:</p>
+                    <code>sudo xattr -rd com.apple.quarantine /Applications/KU\ Client.app</code>
+                  </div>
+                  <div className="step">
+                    <h4>3. 대안 방법</h4>
+                    <p>여전히 문제가 있다면:</p>
+                    <ul>
+                      <li>시스템 환경설정 → 보안 및 개인 정보 보호 → "모든 곳에서 허용"</li>
+                      <li>앱을 우클릭 → "열기" 선택</li>
+                    </ul>
+                  </div>
+                </div>
+              </div>
+
+              <div className="glass">
+                <h3>🐧 Linux</h3>
+                <div className="security-steps">
+                  <div className="step">
+                    <h4>1. 실행 권한</h4>
+                    <p>다운로드 후 실행 권한이 없을 수 있습니다.</p>
+                    <p><strong>해결법:</strong> 터미널에서 <code>chmod +x KU-Client-linux-universal.deb</code></p>
+                  </div>
+                  <div className="step">
+                    <h4>2. DEB 패키지 설치</h4>
+                    <p>Ubuntu/Debian 계열:</p>
+                    <code>sudo dpkg -i KU-Client-linux-universal.deb</code>
+                    <p>의존성 문제 시:</p>
+                    <code>sudo apt-get install -f</code>
+                  </div>
+                  <div className="step">
+                    <h4>3. AppImage 실행</h4>
+                    <p>AppImage 파일의 경우:</p>
+                    <code>chmod +x KU-Client-linux-universal.AppImage</code><br/>
+                    <code>./KU-Client-linux-universal.AppImage</code>
+                  </div>
+                </div>
+              </div>
+            </div>
+            
+            <div className="security-notice">
+              <p><strong>💡 참고사항:</strong> 이 앱은 오픈소스이며 GitHub에서 소스코드를 확인할 수 있습니다. 코드 서명 비용이 높아 현재 적용하지 못했지만, 앱 자체는 안전합니다.</p>
+            </div>
+          </div>
+        </section>
+
         <section id="faq" className="section container" aria-labelledby="faq-title">
           <h2 id="faq-title">자주 묻는 질문</h2>
           <details>
             <summary>실행 시 보안 경고가 나와요.</summary>
-            <p>맞습니다. 윈도우의 보안정책상 SmartScreen 경고가 나옵니다. 이는 이 가난한 개발자가 윈도우의 인증을 받지 못했기 때문에 발생하는 것입니다. 이 경고가 뜨면 그냥 실행 누르시면 설치가 됩니다.</p>
+            <p>코드 서명이 되어있지 않아 발생하는 정상적인 현상입니다. 위의 "보안 경고 해결 방법" 섹션을 참고하여 OS별 해결법을 따라주세요. 앱 자체는 안전하며 오픈소스로 공개되어 있습니다.</p>
           </details>
           <details>
             <summary>어떤 서비스들을 통합 관리할 수 있나요?</summary>
@@ -270,6 +374,17 @@ function App() {
           <details>
             <summary>모든 서비스가 갑자기 접속이 안돼요!</summary>
               <p>본 서비스는 개인 개발자가 고려대학교에서 제공하는 웹사이트를 앱으로 만든것으로 고려대학교 서버가 다운되면 앱을 통한 접속도 어렵습니다.</p>
+          </details>
+          <details>
+            <summary>앱이 정상적으로 작동하지 않아요.</summary>
+            <p>다음 사항을 확인해보세요:</p>
+            <ul>
+              <li>인터넷 연결 상태 확인</li>
+              <li>고려대학교 서버 상태 확인</li>
+              <li>앱을 관리자 권한으로 실행</li>
+              <li>최신 버전으로 업데이트</li>
+              <li>방화벽이나 백신 프로그램의 차단 여부 확인</li>
+            </ul>
           </details>
         </section>
       </main>
@@ -311,6 +426,62 @@ function App() {
                     <span className="asset-filename">{asset.filename}</span>
                   </button>
                 ))}
+              </div>
+            </div>
+          </div>
+        </div>
+      )}
+
+      {/* 간단한 설치 가이드 모달 */}
+      {showInstallGuide && (
+        <div className="modal-overlay" onClick={closeInstallGuide}>
+          <div className="modal-content glass simple-install-modal" onClick={(e) => e.stopPropagation()}>
+            <div className="modal-header">
+              <h3>{installGuidePlatform === 'windows' ? '🪟 Windows' : installGuidePlatform === 'mac' ? '🍎 macOS' : '🐧 Linux'} 설치 안내</h3>
+              <button className="modal-close" onClick={closeInstallGuide} aria-label="닫기">×</button>
+            </div>
+            <div className="modal-body">
+              <div className="install-warning">
+                <p>⚠️ 코드 서명이 되어있지 않아 보안 경고가 나타날 수 있습니다.</p>
+                <p>앱은 안전하며 오픈소스로 공개되어 있습니다.</p>
+              </div>
+              
+              <div className="install-steps">
+                {installGuidePlatform === 'windows' && (
+                  <div className="step">
+                    <h4>Windows 설치 방법</h4>
+                    <p>1. 다운로드 후 "추가 정보" → "실행" 클릭</p>
+                    <p>2. 백신 프로그램에서 예외 처리</p>
+                  </div>
+                )}
+                
+                {installGuidePlatform === 'mac' && (
+                  <div className="step">
+                    <h4>macOS 설치 방법</h4>
+                    <p>1. "확인" → 시스템 환경설정 → 보안 및 개인 정보 보호 → "확인 없이 열기"</p>
+                    <p>2. 또는 터미널에서: <code>sudo xattr -rd com.apple.quarantine /Applications/KU\ Client.app</code></p>
+                  </div>
+                )}
+                
+                {installGuidePlatform === 'linux' && (
+                  <div className="step">
+                    <h4>Linux 설치 방법</h4>
+                    <p>1. 실행 권한 부여: <code>chmod +x KU-Client-linux-universal.deb</code></p>
+                    <p>2. 설치: <code>sudo dpkg -i KU-Client-linux-universal.deb</code></p>
+                  </div>
+                )}
+              </div>
+
+              <div className="modal-actions">
+                <button className="btn btn-primary" onClick={() => {
+                  closeInstallGuide();
+                  showArchitectureSelector(installGuidePlatform);
+                }}>
+                  다운로드 계속하기
+                </button>
+                <button className="btn btn-ghost" onClick={closeInstallGuide}>
+                  닫기
+                </button>
               </div>
             </div>
           </div>
