@@ -93,6 +93,9 @@ function isPdfLikeUrl(rawUrl) {
     if (/drive\.google\.com\/(file\/|uc\?|open\?|preview|view)/i.test(url)) return true;
     if (/googleusercontent\.com\/viewer/i.test(url)) return true;
     if (/viewerng\/viewer\?/i.test(url)) return true; // 일부 구글 뷰어 변종
+    // LMS PDF 뷰어 관련 URL 패턴 추가
+    if (/viewer\.php|viewer\.html|pdfviewer|pdf-viewer/i.test(url)) return true;
+    if (/mylms\.korea\.ac\.kr.*pdf|lms\.korea\.ac\.kr.*pdf/i.test(url)) return true;
     return false;
   } catch (_) { return false; }
 }
@@ -404,12 +407,12 @@ ipcMain.handle('launcher-open-portal', (event, { account, password } = {}) => {
     backgroundColor: nativeTheme.shouldUseDarkColors ? '#0f1115' : '#ffffff',
     webPreferences: {
       preload: path.join(__dirname, 'preload.js'),
-      disableDialogs: true,
       nodeIntegration: false,
       contextIsolation: true,
-      sandbox: true,
       devTools: false,
-      webSecurity: true
+      webSecurity: true,
+      plugins: true,
+      experimentalFeatures: true
     }
   });
   
@@ -418,6 +421,7 @@ ipcMain.handle('launcher-open-portal', (event, { account, password } = {}) => {
   child.webContents.setWindowOpenHandler(({ url }) => {
       try {
         if (isPdfLikeUrl(url)) {
+          console.log('PDF 뷰어 URL 감지:', url);
           child.loadURL(url);
           return { action: 'deny' };
         }
@@ -438,6 +442,19 @@ ipcMain.handle('launcher-open-portal', (event, { account, password } = {}) => {
   // 일부 사이트는 Electron UA를 차단하므로 최신 크롬 UA로 스푸핑
   try {
     child.webContents.setUserAgent('Mozilla/5.0 (Macintosh; Intel Mac OS X 10_15_7) AppleWebKit/537.36 (KHTML, like Gecko) Chrome/126.0.0.0 Safari/537.36');
+  } catch (_) {}
+
+  // PDF 뷰어 관련 추가 설정
+  try {
+    child.webContents.on('did-finish-load', () => {
+      // PDF 플러그인 활성화 확인
+      child.webContents.executeJavaScript(`
+        console.log('PDF 플러그인 상태:', navigator.plugins.length);
+        for (let i = 0; i < navigator.plugins.length; i++) {
+          console.log('플러그인:', navigator.plugins[i].name);
+        }
+      `).catch(_ => {});
+    });
   } catch (_) {}
 
   // 포털 도메인 요청에 공통 Referer를 강제 설정(리다이렉트 중에도 유지)
@@ -479,8 +496,191 @@ ipcMain.handle('launcher-open-portal', (event, { account, password } = {}) => {
       try {
         await child.webContents.insertCSS(`
           @import url('https://cdn.jsdelivr.net/gh/orioncactus/pretendard/dist/web/static/pretendard.css');
-          html, body, * { font-family: 'Pretendard', -apple-system, BlinkMacSystemFont, 'Segoe UI', Roboto, 'Apple SD Gothic Neo', Inter, system-ui, sans-serif !important; }
+          html, body, * { font-family: 'Pretendard' !important; }
         `);
+      } catch (_) {}
+      
+      // 장학금 신청 페이지에서 웹페이지 내 모달 팝업 구현
+      try {
+        await child.webContents.executeJavaScript(`(function(){
+          if (window.__kuScholarshipModalInjected) return;
+          window.__kuScholarshipModalInjected = true;
+          console.log('장학금 신청 모달 스크립트 주입됨');
+          
+          // 모달 스타일 추가
+          const modalStyle = document.createElement('style');
+          modalStyle.textContent = \`
+            .ku-scholarship-modal {
+              position: fixed;
+              top: 0;
+              left: 0;
+              width: 100%;
+              height: 100%;
+              background: rgba(0, 0, 0, 0.5);
+              z-index: 999999;
+              display: none;
+              justify-content: center;
+              align-items: center;
+            }
+            .ku-scholarship-modal.show {
+              display: flex;
+            }
+            .ku-scholarship-modal-content {
+              background: white;
+              padding: 30px;
+              border-radius: 10px;
+              box-shadow: 0 10px 30px rgba(0, 0, 0, 0.3);
+              max-width: 400px;
+              width: 90%;
+              text-align: center;
+            }
+            .ku-scholarship-modal-title {
+              font-size: 18px;
+              font-weight: bold;
+              margin-bottom: 20px;
+              color: #333;
+            }
+            .ku-scholarship-modal-message {
+              font-size: 16px;
+              margin-bottom: 30px;
+              color: #666;
+            }
+            .ku-scholarship-modal-buttons {
+              display: flex;
+              gap: 10px;
+              justify-content: center;
+            }
+            .ku-scholarship-modal-btn {
+              padding: 10px 20px;
+              border: none;
+              border-radius: 5px;
+              cursor: pointer;
+              font-size: 14px;
+              min-width: 80px;
+            }
+            .ku-scholarship-modal-btn.cancel {
+              background: #f5f5f5;
+              color: #333;
+            }
+            .ku-scholarship-modal-btn.ok {
+              background: #007bff;
+              color: white;
+            }
+            .ku-scholarship-modal-btn:hover {
+              opacity: 0.8;
+            }
+          \`;
+          document.head.appendChild(modalStyle);
+          
+          // 모달 HTML 생성
+          const modal = document.createElement('div');
+          modal.className = 'ku-scholarship-modal';
+          modal.innerHTML = \`
+            <div class="ku-scholarship-modal-content">
+              <div class="ku-scholarship-modal-title">장학금 신청</div>
+              <div class="ku-scholarship-modal-message">장학금을 신청하시겠습니까?</div>
+              <div class="ku-scholarship-modal-buttons">
+                <button class="ku-scholarship-modal-btn cancel">Cancel</button>
+                <button class="ku-scholarship-modal-btn ok">OK</button>
+              </div>
+            </div>
+          \`;
+          document.body.appendChild(modal);
+          console.log('장학금 신청 모달 생성됨:', modal);
+          
+          // 모달 이벤트 처리
+          modal.querySelector('.cancel').addEventListener('click', () => {
+            modal.classList.remove('show');
+          });
+          
+          modal.querySelector('.ok').addEventListener('click', () => {
+            modal.classList.remove('show');
+            // 실제 장학금 신청 로직은 여기에 추가
+            console.log('장학금 신청 확인됨');
+          });
+          
+          // 모달 배경 클릭 시 닫기
+          modal.addEventListener('click', (e) => {
+            if (e.target === modal) {
+              modal.classList.remove('show');
+            }
+          });
+          
+          // 장학금 신청 버튼 클릭 감지
+          function handleScholarshipButtonClick(e) {
+            const target = e.target;
+            console.log('클릭된 요소:', target.tagName, target.textContent, target.value);
+            
+            // INPUT 태그의 신청 버튼 감지
+            if (target.tagName === 'INPUT' && target.value === '신청') {
+              console.log('INPUT 신청 버튼 감지됨');
+              e.preventDefault();
+              e.stopPropagation();
+              modal.classList.add('show');
+            }
+            // BUTTON 태그의 신청 버튼 감지 (실제 구조)
+            else if (target.tagName === 'BUTTON' && target.textContent.trim() === '신청') {
+              console.log('BUTTON 신청 버튼 감지됨');
+              e.preventDefault();
+              e.stopPropagation();
+              modal.classList.add('show');
+            }
+            // BUTTON 내부의 SPAN 태그 클릭 시에도 감지
+            else if (target.tagName === 'SPAN' && target.textContent.trim() === '신청' && target.parentElement.tagName === 'BUTTON') {
+              console.log('SPAN 신청 버튼 감지됨');
+              e.preventDefault();
+              e.stopPropagation();
+              modal.classList.add('show');
+            }
+            // 더 넓은 범위로 감지 (onclick 속성이 있는 버튼)
+            else if (target.tagName === 'BUTTON' && target.onclick && target.textContent.includes('신청')) {
+              console.log('onclick 속성이 있는 신청 버튼 감지됨');
+              e.preventDefault();
+              e.stopPropagation();
+              modal.classList.add('show');
+            }
+            // SPAN 클릭 시 부모 버튼 확인
+            else if (target.tagName === 'SPAN' && target.parentElement && target.parentElement.tagName === 'BUTTON' && target.parentElement.onclick) {
+              console.log('SPAN의 부모 onclick 버튼 감지됨');
+              e.preventDefault();
+              e.stopPropagation();
+              modal.classList.add('show');
+            }
+          }
+          
+          // 이벤트 리스너 등록
+          document.addEventListener('click', handleScholarshipButtonClick, true);
+          console.log('장학금 신청 버튼 클릭 이벤트 리스너 등록됨');
+          
+          // 동적으로 추가되는 버튼도 감지하기 위해 MutationObserver 사용
+          const observer = new MutationObserver((mutations) => {
+            mutations.forEach((mutation) => {
+              mutation.addedNodes.forEach((node) => {
+                if (node.nodeType === 1) { // Element node
+                  // INPUT 태그의 신청 버튼 감지
+                  const inputButtons = node.querySelectorAll ? node.querySelectorAll('input[value="신청"]') : [];
+                  inputButtons.forEach(btn => {
+                    btn.addEventListener('click', handleScholarshipButtonClick);
+                  });
+                  
+                  // BUTTON 태그의 신청 버튼 감지
+                  const buttonElements = node.querySelectorAll ? node.querySelectorAll('button') : [];
+                  buttonElements.forEach(btn => {
+                    if (btn.textContent.trim() === '신청') {
+                      btn.addEventListener('click', handleScholarshipButtonClick);
+                    }
+                  });
+                }
+              });
+            });
+          });
+          
+          observer.observe(document.body, {
+            childList: true,
+            subtree: true
+          });
+          
+        })();`);
       } catch (_) {}
       // 세션 만료 알림만 주입 (헤더 없이)
       try {
@@ -576,9 +776,193 @@ ipcMain.handle('launcher-open-portal', (event, { account, password } = {}) => {
       try {
         await child.webContents.insertCSS(`
           @import url('https://cdn.jsdelivr.net/gh/orioncactus/pretendard/dist/web/static/pretendard.css');
-          html, body, * { font-family: 'Pretendard', -apple-system, BlinkMacSystemFont, 'Segoe UI', Roboto, 'Apple SD Gothic Neo', Inter, system-ui, sans-serif !important; }
+          html, body, * { font-family: 'Pretendard' !important; }
         `);
       } catch (_) {}
+      
+      // 장학금 신청 페이지에서 웹페이지 내 모달 팝업 구현 (in-page 내비게이션)
+      try {
+        await child.webContents.executeJavaScript(`(function(){
+          if (window.__kuScholarshipModalInjected) return;
+          window.__kuScholarshipModalInjected = true;
+          console.log('장학금 신청 모달 스크립트 주입됨');
+          
+          // 모달 스타일 추가
+          const modalStyle = document.createElement('style');
+          modalStyle.textContent = \`
+            .ku-scholarship-modal {
+              position: fixed;
+              top: 0;
+              left: 0;
+              width: 100%;
+              height: 100%;
+              background: rgba(0, 0, 0, 0.5);
+              z-index: 999999;
+              display: none;
+              justify-content: center;
+              align-items: center;
+            }
+            .ku-scholarship-modal.show {
+              display: flex;
+            }
+            .ku-scholarship-modal-content {
+              background: white;
+              padding: 30px;
+              border-radius: 10px;
+              box-shadow: 0 10px 30px rgba(0, 0, 0, 0.3);
+              max-width: 400px;
+              width: 90%;
+              text-align: center;
+            }
+            .ku-scholarship-modal-title {
+              font-size: 18px;
+              font-weight: bold;
+              margin-bottom: 20px;
+              color: #333;
+            }
+            .ku-scholarship-modal-message {
+              font-size: 16px;
+              margin-bottom: 30px;
+              color: #666;
+            }
+            .ku-scholarship-modal-buttons {
+              display: flex;
+              gap: 10px;
+              justify-content: center;
+            }
+            .ku-scholarship-modal-btn {
+              padding: 10px 20px;
+              border: none;
+              border-radius: 5px;
+              cursor: pointer;
+              font-size: 14px;
+              min-width: 80px;
+            }
+            .ku-scholarship-modal-btn.cancel {
+              background: #f5f5f5;
+              color: #333;
+            }
+            .ku-scholarship-modal-btn.ok {
+              background: #007bff;
+              color: white;
+            }
+            .ku-scholarship-modal-btn:hover {
+              opacity: 0.8;
+            }
+          \`;
+          document.head.appendChild(modalStyle);
+          
+          // 모달 HTML 생성
+          const modal = document.createElement('div');
+          modal.className = 'ku-scholarship-modal';
+          modal.innerHTML = \`
+            <div class="ku-scholarship-modal-content">
+              <div class="ku-scholarship-modal-title">장학금 신청</div>
+              <div class="ku-scholarship-modal-message">장학금을 신청하시겠습니까?</div>
+              <div class="ku-scholarship-modal-buttons">
+                <button class="ku-scholarship-modal-btn cancel">Cancel</button>
+                <button class="ku-scholarship-modal-btn ok">OK</button>
+              </div>
+            </div>
+          \`;
+          document.body.appendChild(modal);
+          console.log('장학금 신청 모달 생성됨:', modal);
+          
+          // 모달 이벤트 처리
+          modal.querySelector('.cancel').addEventListener('click', () => {
+            modal.classList.remove('show');
+          });
+          
+          modal.querySelector('.ok').addEventListener('click', () => {
+            modal.classList.remove('show');
+            // 실제 장학금 신청 로직은 여기에 추가
+            console.log('장학금 신청 확인됨');
+          });
+          
+          // 모달 배경 클릭 시 닫기
+          modal.addEventListener('click', (e) => {
+            if (e.target === modal) {
+              modal.classList.remove('show');
+            }
+          });
+          
+          // 장학금 신청 버튼 클릭 감지
+          function handleScholarshipButtonClick(e) {
+            const target = e.target;
+            console.log('클릭된 요소:', target.tagName, target.textContent, target.value);
+            
+            // INPUT 태그의 신청 버튼 감지
+            if (target.tagName === 'INPUT' && target.value === '신청') {
+              console.log('INPUT 신청 버튼 감지됨');
+              e.preventDefault();
+              e.stopPropagation();
+              modal.classList.add('show');
+            }
+            // BUTTON 태그의 신청 버튼 감지 (실제 구조)
+            else if (target.tagName === 'BUTTON' && target.textContent.trim() === '신청') {
+              console.log('BUTTON 신청 버튼 감지됨');
+              e.preventDefault();
+              e.stopPropagation();
+              modal.classList.add('show');
+            }
+            // BUTTON 내부의 SPAN 태그 클릭 시에도 감지
+            else if (target.tagName === 'SPAN' && target.textContent.trim() === '신청' && target.parentElement.tagName === 'BUTTON') {
+              console.log('SPAN 신청 버튼 감지됨');
+              e.preventDefault();
+              e.stopPropagation();
+              modal.classList.add('show');
+            }
+            // 더 넓은 범위로 감지 (onclick 속성이 있는 버튼)
+            else if (target.tagName === 'BUTTON' && target.onclick && target.textContent.includes('신청')) {
+              console.log('onclick 속성이 있는 신청 버튼 감지됨');
+              e.preventDefault();
+              e.stopPropagation();
+              modal.classList.add('show');
+            }
+            // SPAN 클릭 시 부모 버튼 확인
+            else if (target.tagName === 'SPAN' && target.parentElement && target.parentElement.tagName === 'BUTTON' && target.parentElement.onclick) {
+              console.log('SPAN의 부모 onclick 버튼 감지됨');
+              e.preventDefault();
+              e.stopPropagation();
+              modal.classList.add('show');
+            }
+          }
+          
+          // 이벤트 리스너 등록
+          document.addEventListener('click', handleScholarshipButtonClick, true);
+          console.log('장학금 신청 버튼 클릭 이벤트 리스너 등록됨');
+          
+          // 동적으로 추가되는 버튼도 감지하기 위해 MutationObserver 사용
+          const observer = new MutationObserver((mutations) => {
+            mutations.forEach((mutation) => {
+              mutation.addedNodes.forEach((node) => {
+                if (node.nodeType === 1) { // Element node
+                  // INPUT 태그의 신청 버튼 감지
+                  const inputButtons = node.querySelectorAll ? node.querySelectorAll('input[value="신청"]') : [];
+                  inputButtons.forEach(btn => {
+                    btn.addEventListener('click', handleScholarshipButtonClick);
+                  });
+                  
+                  // BUTTON 태그의 신청 버튼 감지
+                  const buttonElements = node.querySelectorAll ? node.querySelectorAll('button') : [];
+                  buttonElements.forEach(btn => {
+                    if (btn.textContent.trim() === '신청') {
+                      btn.addEventListener('click', handleScholarshipButtonClick);
+                    }
+                  });
+                }
+              });
+            });
+          });
+          
+          observer.observe(document.body, {
+            childList: true,
+            subtree: true
+          });
+          
+        })();`);
+      } catch (_) {}
+      
       // 헤더가 사라졌으면 재주입 시도 표시 플래그 유지
       try {
         await child.webContents.executeJavaScript(`(function(){ if(!document.getElementById('ku-helper-bar')){ window.__kuSessionBarInjected = false; } })();`);
@@ -630,6 +1014,7 @@ ipcMain.handle('launcher-open-portal', (event, { account, password } = {}) => {
   });
 });
 
+
 ipcMain.handle('launcher-open-lms', (event, { account, password } = {}) => {
   console.log('LMS 열기 요청:', { 
     hasAccount: !!account, 
@@ -648,7 +1033,9 @@ ipcMain.handle('launcher-open-lms', (event, { account, password } = {}) => {
     backgroundColor: nativeTheme.shouldUseDarkColors ? '#0f1115' : '#ffffff',
     webPreferences: {
       preload: path.join(__dirname, 'preload.js'),
-      disableDialogs: true
+      disableDialogs: true,
+      plugins: true,
+      experimentalFeatures: true
     }
   });
   
@@ -666,6 +1053,7 @@ ipcMain.handle('launcher-open-lms', (event, { account, password } = {}) => {
     child.webContents.setWindowOpenHandler(({ url }) => {
       try {
         if (isPdfLikeUrl(url)) {
+          console.log('LMS PDF 뷰어 URL 감지:', url);
           child.loadURL(url);
           return { action: 'deny' };
         }
@@ -681,6 +1069,19 @@ ipcMain.handle('launcher-open-lms', (event, { account, password } = {}) => {
   // 일부 사이트는 Electron UA를 차단하므로 최신 크롬 UA로 스푸핑
   try {
     child.webContents.setUserAgent('Mozilla/5.0 (Macintosh; Intel Mac OS X 10_15_7) AppleWebKit/537.36 (KHTML, like Gecko) Chrome/126.0.0.0 Safari/537.36');
+  } catch (_) {}
+
+  // PDF 뷰어 관련 추가 설정
+  try {
+    child.webContents.on('did-finish-load', () => {
+      // PDF 플러그인 활성화 확인
+      child.webContents.executeJavaScript(`
+        console.log('LMS PDF 플러그인 상태:', navigator.plugins.length);
+        for (let i = 0; i < navigator.plugins.length; i++) {
+          console.log('플러그인:', navigator.plugins[i].name);
+        }
+      `).catch(_ => {});
+    });
   } catch (_) {}
 
   const tryLMSAutoLogin = async () => {
@@ -727,7 +1128,7 @@ ipcMain.handle('launcher-open-lms', (event, { account, password } = {}) => {
       try {
         await child.webContents.insertCSS(`
           @import url('https://cdn.jsdelivr.net/gh/orioncactus/pretendard/dist/web/static/pretendard.css');
-          html, body, * { font-family: 'Pretendard', -apple-system, BlinkMacSystemFont, 'Segoe UI', Roboto, 'Apple SD Gothic Neo', Inter, system-ui, sans-serif !important; }
+          html, body, * { font-family: 'Pretendard' !important; }
         `);
       } catch (_) {}
     }
@@ -752,7 +1153,7 @@ ipcMain.handle('launcher-open-lms', (event, { account, password } = {}) => {
       try {
         await child.webContents.insertCSS(`
           @import url('https://cdn.jsdelivr.net/gh/orioncactus/pretendard/dist/web/static/pretendard.css');
-          html, body, * { font-family: 'Pretendard', -apple-system, BlinkMacSystemFont, 'Segoe UI', Roboto, 'Apple SD Gothic Neo', Inter, system-ui, sans-serif !important; }
+          html, body, * { font-family: 'Pretendard' !important; }
         `);
       } catch (_) {}
     }
@@ -986,6 +1387,60 @@ function createWindow() {
 }
 
 app.whenReady().then(() => {
+  // PDF 플러그인 활성화
+  try {
+    const { session } = require('electron');
+    const ses = session.defaultSession;
+    
+    // PDF 플러그인 활성화
+    ses.setPermissionRequestHandler((webContents, permission, callback) => {
+      if (permission === 'plugins') {
+        callback(true);
+      } else {
+        callback(false);
+      }
+    });
+    
+    // PDF 뷰어 관련 권한 설정
+    ses.setPermissionCheckHandler((webContents, permission, requestingOrigin, details) => {
+      if (permission === 'plugins') {
+        return true;
+      }
+      return false;
+    });
+    
+    // PDF 뷰어 관련 추가 설정
+    ses.setUserAgent('Mozilla/5.0 (Macintosh; Intel Mac OS X 10_15_7) AppleWebKit/537.36 (KHTML, like Gecko) Chrome/126.0.0.0 Safari/537.36');
+    
+    // PDF 뷰어 관련 헤더 설정
+    ses.webRequest.onBeforeSendHeaders((details, callback) => {
+      if (details.url.includes('.pdf') || details.url.includes('pdfviewer') || details.url.includes('viewer')) {
+        details.requestHeaders['Accept'] = 'application/pdf,application/x-pdf,application/x-bzpdf,application/x-gzpdf,*/*';
+        details.requestHeaders['Accept-Encoding'] = 'gzip, deflate, br';
+        details.requestHeaders['Accept-Language'] = 'ko-KR,ko;q=0.9,en;q=0.8';
+      }
+      callback({ requestHeaders: details.requestHeaders });
+    });
+    
+    // PDF 뷰어 관련 추가 설정
+    ses.setPreloads([path.join(__dirname, 'preload.js')]);
+    
+    // PDF 뷰어 관련 쿠키 설정
+    ses.cookies.set({
+      url: 'https://mylms.korea.ac.kr',
+      name: 'pdf_viewer_enabled',
+      value: 'true',
+      domain: 'mylms.korea.ac.kr',
+      path: '/',
+      secure: true,
+      httpOnly: false
+    }).catch(_ => {});
+    
+    console.log('PDF 플러그인이 활성화되었습니다.');
+  } catch (error) {
+    console.error('PDF 플러그인 활성화 중 오류:', error);
+  }
+
   createWindow();
 
   app.on('activate', () => {

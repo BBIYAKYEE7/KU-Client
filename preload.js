@@ -395,5 +395,3 @@ contextBridge.exposeInMainWorld('launcher', {
     tryInject();
   }, 1000);
 })();
-
-

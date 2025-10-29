@@ -1,6 +1,6 @@
 {
   "name": "ku-client",
-  "version": "1.0.0",
+  "version": "1.2.0",
   "description": "KU Client - Korea University Unified Launcher (LMS & Portal)",
   "main": "main.js",
   "scripts": {

@@ -10,6 +10,7 @@ class AutoUpdater {
     this.githubApiUrl = `https://api.github.com/repos/${this.repoOwner}/${this.repoName}/releases/latest`;
     this.releaseUrl = 'https://github.com/BBIYAKYEE7/KU-Client/releases/latest';
     this.userSelectedArch = null; // 사용자가 선택한 아키텍처 (우선 적용)
+    this.autoPromptShownThisRun = false; // 이 실행 세션에서 자동 업데이트 팝업을 한 번만 표시
   }
 
   // 간단한 Markdown → 평문 변환 (dialog에서 Markdown이 그대로 노출되는 문제 방지)
@@ -167,26 +168,24 @@ class AutoUpdater {
       detail: `현재 버전: v${this.currentVersion}\n최신 버전: v${updateInfo.version}\n\n요약: 새로운 기능과 개선 사항이 포함되었습니다.\n자세한 패치노트는 \"상세 보기\"에서 확인하세요.`,
       buttons: ['지금 업데이트', '나중에', '상세 보기'],
       defaultId: 0,
-      cancelId: 2,
+      cancelId: 1,
       icon: path.join(__dirname, 'image', 'logo.png')
     };
 
+    // 세션 내 재호출 방지 플래그를 팝업 진입 시 즉시 설정
+    this.autoPromptShownThisRun = true;
     const result = await dialog.showMessageBox(options);
     
     switch (result.response) {
-      case 0: // 업데이트 (아키텍처 선택)
+      case 0: // 지금 업데이트 → 아키텍처 선택 후 진행
         await this.promptArchitectureAndUpdate(updateInfo);
         break;
-      case 1: // 수동 다운로드
-        this.manualDownload(updateInfo);
-        break;
-      case 2: // 나중에
+      case 1: // 나중에
         // 아무것도 하지 않음
         break;
-      case 3: // 상세 보기 (Markdown 전용 뷰어)
+      case 2: // 상세 보기 (Markdown 전용 뷰어)
         await this.showMarkdownModal(updateInfo);
-        // 상세 보기 닫힌 후, 다시 옵션 표시하여 흐름 유지
-        await this.showUpdateDialog(updateInfo);
+        // 상세 보기 후에는 재호출하지 않음 (루프 방지)
         break;
     }
   }
@@ -232,17 +231,36 @@ class AutoUpdater {
 <body>
   <header>Korea University Launcher v${updateInfo.version} 패치노트</header>
   <div class="content"><div id="md" class="md"></div></div>
-  <footer><button id="closeBtn" autofocus>닫기</button></footer>
+  <footer>
+    <div style="display:flex; gap:8px; justify-content:flex-end; width:100%">
+      <button id="updateNowBtn">지금 업데이트</button>
+      <button id="closeBtn" autofocus>닫기</button>
+    </div>
+  </footer>
   <script>
     const raw = ${JSON.stringify(md)};
     document.getElementById('md').innerHTML = window.marked.parse(raw);
     document.getElementById('closeBtn').onclick = () => window.close();
+    document.getElementById('updateNowBtn').onclick = () => { location.hash = '#update-now'; };
     window.addEventListener('keydown', (e) => { if (e.key === 'Escape' || (e.key.toLowerCase() === 'w' && (e.metaKey || e.ctrlKey))) window.close(); });
   </script>
 </body>
 </html>`;
 
     win.loadURL('data:text/html;charset=utf-8,' + encodeURIComponent(html));
+
+    // 상세보기 창에서 "지금 업데이트" 버튼을 누르면 해시로 신호를 보내고, 여기서 처리
+    win.webContents.on('did-navigate-in-page', async (_event, url) => {
+      try {
+        if (typeof url === 'string' && url.endsWith('#update-now')) {
+          // 창 닫고 아키텍처 선택 후 업데이트 진행
+          win.close();
+          await this.promptArchitectureAndUpdate(updateInfo);
+        }
+      } catch (e) {
+        console.error('상세보기에서 업데이트 트리거 처리 중 오류:', e);
+      }
+    });
   }
 
   // 아키텍처 선택 다이얼로그 + 가이드 제공 후 다운로드 진행
@@ -710,28 +728,33 @@ class AutoUpdater {
 
     // 즉시 첫 번째 업데이트 확인
     setTimeout(async () => {
+      // 이 세션에서 이미 자동 팝업을 한 번 띄웠다면 더 이상 표시하지 않음
+      if (this.autoPromptShownThisRun) return;
       const updateInfo = await this.checkForUpdates();
       if (updateInfo) {
-        // 자동 업데이트가 활성화되어 있으면 자동으로 업데이트
         if (this.isAutoUpdateEnabled()) {
           console.log('자동 업데이트가 활성화되어 있습니다. 자동으로 업데이트를 시작합니다.');
           await this.downloadUpdate(updateInfo);
+          this.autoPromptShownThisRun = true;
         } else {
           await this.showUpdateDialog(updateInfo);
+          this.autoPromptShownThisRun = true;
         }
       }
     }, 1000); // 1초 후 즉시 확인
 
-    // 이후 24시간마다 업데이트 확인
+    // 이후 24시간마다 업데이트 확인 (세션당 1회만 팝업)
     setInterval(async () => {
+      if (this.autoPromptShownThisRun) return;
       const updateInfo = await this.checkForUpdates();
       if (updateInfo) {
-        // 자동 업데이트가 활성화되어 있으면 자동으로 업데이트
         if (this.isAutoUpdateEnabled()) {
           console.log('자동 업데이트가 활성화되어 있습니다. 자동으로 업데이트를 시작합니다.');
           await this.downloadUpdate(updateInfo);
+          this.autoPromptShownThisRun = true;
         } else {
           await this.showUpdateDialog(updateInfo);
+          this.autoPromptShownThisRun = true;
         }
       }
     }, 24 * 60 * 60 * 1000); // 24시간

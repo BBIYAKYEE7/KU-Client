@@ -241,6 +241,7 @@ document.addEventListener('DOMContentLoaded', () => {
   });
 
 
+
   // 테마 매니저 초기화
   ThemeManager.init();
 
